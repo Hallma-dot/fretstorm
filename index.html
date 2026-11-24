@@ -290,31 +290,37 @@ body.reduce *, body.reduce *::before, body.reduce *::after { animation-duration:
 .modal .card > * { flex-shrink: 0; }
 .lesson-art { display: block; height: auto; }
 @media (max-width: 700px), (hover: none) { .key kbd { display: none; } }
-/* Sideways phones: board on the left, answer keys on the right, everything on one screen */
+/* Sideways phones: fretboard across the full width, answer keys in a wide row underneath,
+   boss bar beside the HUD; the board shrinks to whatever height is left so nothing scrolls */
 @media (max-height: 520px) and (orientation: landscape) {
-  #play { padding-top: calc(env(safe-area-inset-top, 0px) + 6px); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 6px); }
-  #play .wrap { gap: 6px; }
+  #play { overflow: hidden; padding-top: calc(env(safe-area-inset-top, 0px) + 6px); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 6px); }
+  #play .wrap { flex: none; flex-direction: row; align-items: center; gap: 14px; }
+  #play .hud { flex: 1 1 auto; min-width: 0; }
+  .boss-bar { flex: 0 1 44%; width: auto; gap: 8px; }
   .hud .iconbtn { height: 34px; min-width: 36px; }
   .hud-title { font-size: 13px; }
   .score { font-size: 18px; }
-  .boss-art { width: 44px; height: 44px; }
-  .hearts { font-size: 17px; }
-  .stage {
-    margin-top: 4px; gap: 6px 14px; display: grid; align-items: center;
-    grid-template-columns: minmax(0, 1fr) minmax(210px, 32%);
-    grid-template-areas: "prompt prompt" "timer timer" "board pad" "board feedback";
-  }
-  #play.nopad .stage { grid-template-columns: minmax(0, 1fr); grid-template-areas: "prompt" "timer" "board" "feedback"; }
-  .prompt { grid-area: prompt; font-size: 17px; min-height: 0; }
-  .timer { grid-area: timer; justify-self: center; }
-  .board-wrap { grid-area: board; }
-  #board { transform: rotateX(8deg); }
-  .pad { grid-area: pad; gap: 5px 3px; }
-  .key { padding: 10px 0; font-size: 18px; border-radius: 9px; }
-  .key.acc { padding: 6px 0; font-size: 11px; }
-  .feedback { grid-area: feedback; font-size: 13px; align-self: start; }
+  .boss-art { width: 40px; height: 40px; }
+  .hearts { font-size: 16px; }
+  .stage { flex: 1 1 auto; min-height: 0; gap: 4px; margin-top: 4px; }
+  .prompt { font-size: 17px; min-height: 0; flex: none; }
+  .timer { flex: none; }
+  .board-wrap { flex: 1 1 0; min-height: 60px; display: flex; justify-content: center; }
+  #board { width: auto; height: 100%; max-width: 100%; transform: rotateX(8deg); }
+  .feedback { flex: none; min-height: 1.3em; font-size: 12px; gap: 4px; }
   .hint-chip { font-size: 11px; padding: 2px 6px; }
+  .pad { flex: none; max-width: 660px; gap: 5px 4px; }
+  .key { padding: 8px 0; font-size: 19px; border-radius: 10px; }
+  .key.acc { padding: 5px 0; font-size: 11px; }
   .rotate-tip { display: none !important; }
+  .boss-info { min-width: 0; }
+  .boss-name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
+@media (max-height: 370px) and (orientation: landscape) {
+  .prompt { font-size: 15px; }
+  .key { padding: 6px 0; font-size: 17px; }
+  .key.acc { padding: 3px 0; }
+  .pad { gap: 4px; }
 }
 /* Class leaderboard */
 .menu.has-lb #btnSettings { grid-column: 1 / -1; }
@@ -693,13 +699,25 @@ const Sound = (() => {
   const cache = new Map();
   const opts = { sfx: true, music: true, vol: 0.8 };
   const freq = m => 440 * Math.pow(2, (m - 69) / 12);
+  // Phones and tablets: small speakers can't play deep bass, so trim it and lift the range they can play
+  const small = !!(window.matchMedia && matchMedia('(hover: none) and (pointer: coarse)').matches);
 
   function init() {
-    if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
-    try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { ctx = null; return; }
-    const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -14; comp.ratio.value = 4;
-    master = ctx.createGain(); master.connect(comp); comp.connect(ctx.destination);
+    if (ctx) { wake(); return; }
+    // iPhone: play like a music app, so the ring/silent switch doesn't mute the game
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+    const AC = window.AudioContext || window.webkitAudioContext;
+    try { ctx = new AC({ latencyHint: small ? 'balanced' : 'interactive' }); } catch (e) { try { ctx = new AC(); } catch (e2) { ctx = null; return; } }
+    // master -> low cut (+ presence lift on phones) -> soft clipper -> speakers.
+    // The soft clipper rounds off loud peaks instead of letting them crackle.
+    master = ctx.createGain();
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = small ? 110 : 35; hp.Q.value = 0.6;
+    const pres = ctx.createBiquadFilter(); pres.type = 'peaking'; pres.frequency.value = 2400; pres.Q.value = 0.8; pres.gain.value = small ? 5 : 0;
+    const pre = ctx.createGain(); pre.gain.value = (small ? 1.2 : 1) / 3;
+    const clip = ctx.createWaveShaper(), n = 2048, curve = new Float32Array(n);
+    for (let i = 0; i < n; i++) curve[i] = 0.98 * Math.tanh(3 * (i / (n - 1) * 2 - 1));
+    clip.curve = curve; clip.oversample = '2x';
+    master.connect(hp).connect(pres).connect(pre).connect(clip).connect(ctx.destination);
     sfxBus = ctx.createGain(); sfxBus.connect(master);
     musicBus = ctx.createGain(); musicBus.connect(master);
     noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
@@ -710,8 +728,13 @@ const Sound = (() => {
     if (!ctx) return;
     master.gain.value = opts.vol;
     sfxBus.gain.value = opts.sfx ? 1 : 0;
-    musicBus.gain.value = opts.music ? 0.5 : 0;
+    musicBus.gain.value = opts.music ? 0.65 : 0;
   }
+  // iPhones pause sound after an interruption (lock screen, notification, another app) and only
+  // let it restart during a tap or key press, so every tap checks that sound is still running
+  function wake() { if (ctx && ctx.state !== 'running' && ctx.state !== 'closed') { const p = ctx.resume(); if (p && p.catch) p.catch(() => {}); } }
+  ['pointerup', 'touchend', 'click', 'keydown'].forEach(t => addEventListener(t, () => init(), { capture: true, passive: true }));
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) wake(); });
   function set(o) { Object.assign(opts, o); apply(); if (!opts.music) Music.stop(); }
 
   // Karplus-Strong string: a burst of noise circulating in a short delay line, softened every lap
@@ -740,7 +763,7 @@ const Sound = (() => {
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = o.bright || 4200;
     const g = ctx.createGain(); g.gain.value = o.gain == null ? 0.55 : o.gain;
     let node = src.connect(lp).connect(g);
-    if (ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = o.pan || 0; node = node.connect(p); }
+    if (!small && ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = o.pan || 0; node = node.connect(p); }
     node.connect(o.bus || sfxBus);
     src.start(t);
   }
@@ -796,9 +819,9 @@ const Sound = (() => {
       while (next < ctx.currentTime + 0.12) { play(step, next); next += 60 / bpm / 4; step++; }
     }
     function pad(root, q, t, dur) {
-      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500 + intensity * 260;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900 + intensity * 300;
       const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.045, t + 0.6); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      g.gain.exponentialRampToValueAtTime(small ? 0.15 : 0.09, t + 0.6); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
       lp.connect(g).connect(musicBus);
       tones(q).concat([12]).forEach((x, i) => {
         const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = freq(root + 12 + x); o.detune.value = (i % 2 ? 7 : -7);
@@ -809,14 +832,18 @@ const Sound = (() => {
       const s16 = st % 16, bar = Math.floor(st / 16) % prog.length, [root, q] = prog[bar], I = intensity;
       const spb = 60 / bpm;
       if (s16 === 0) pad(root, q, t, spb * 4);
-      if (I >= 1 && (s16 === 0 || s16 === 8 || (I >= 4 && s16 === 6))) tone(150, { to: 42, gain: 0.55, dur: 0.16, when: t, bus: musicBus });
-      if (I >= 1 && s16 % 2 === 0) hiss({ when: t, gain: s16 % 4 === 2 ? 0.07 : 0.035, dur: 0.035, bus: musicBus });
-      if (I >= 4 && s16 % 2 === 1) hiss({ when: t, gain: 0.025, dur: 0.02, bus: musicBus });
+      if (I >= 1 && (s16 === 0 || s16 === 8 || (I >= 4 && s16 === 6))) {
+        tone(small ? 190 : 150, { to: small ? 60 : 42, gain: 0.5, dur: 0.16, when: t, bus: musicBus });
+        hiss({ when: t, type: 'bandpass', freq: 3200, q: 1.2, gain: small ? 0.16 : 0.08, dur: 0.015, bus: musicBus }); // beater click
+      }
+      if (I === 0 && s16 % 2 === 0) hiss({ when: t, gain: s16 % 4 === 2 ? 0.05 : 0.025, dur: 0.03, bus: musicBus }); // soft shaker
+      if (I >= 1 && s16 % 2 === 0) hiss({ when: t, gain: s16 % 4 === 2 ? 0.1 : 0.05, dur: 0.035, bus: musicBus });
+      if (I >= 4 && s16 % 2 === 1) hiss({ when: t, gain: 0.035, dur: 0.02, bus: musicBus });
       if (I >= 3 && (s16 === 4 || s16 === 12)) { hiss({ when: t, type: 'bandpass', freq: 1900, q: 0.8, gain: 0.22, dur: 0.14, bus: musicBus }); tone(190, { when: t, gain: 0.08, dur: 0.08, type: 'triangle', bus: musicBus }); }
-      if (I >= 2 && [0, 3, 6, 8, 11, 14].includes(s16)) pluck(root + (s16 === 11 ? 12 : 0), { when: t, gain: 0.42, bright: 1400, bus: musicBus });
+      if (I >= 2 && [0, 3, 6, 8, 11, 14].includes(s16)) pluck(root + (small ? 12 : 0) + (s16 === 11 ? 12 : 0), { when: t, gain: 0.42, bright: small ? 2400 : 1400, bus: musicBus });
       if (I >= 3) {
         const tt = tones(q), arp = [tt[0] + 24, tt[1] + 24, tt[2] + 24, tt[0] + 36];
-        pluck(root + arp[s16 % 4], { when: t, gain: 0.07, pan: s16 % 2 ? 0.4 : -0.4, bus: musicBus });
+        pluck(root + arp[s16 % 4], { when: t, gain: small ? 0.1 : 0.07, pan: s16 % 2 ? 0.4 : -0.4, bus: musicBus });
       }
       if (s16 % 4 === 0 && onBeat) {
         const ms = Math.max(0, (t - ctx.currentTime) * 1000), b = s16 / 4;
@@ -843,10 +870,10 @@ class Fretboard {
   draw(o) {
     this.o = o;
     // Phones get a taller board (bigger string spacing and text) so every spot stays tappable
-    // (a sideways phone gets a medium board so the answer buttons still fit beside it)
+    // (a sideways phone gets a medium board that fits above the answer keys)
     const narrow = (this.svg.getBoundingClientRect().width || innerWidth) < 640;
     const short = innerHeight < 520 && innerWidth > innerHeight;
-    const sz = narrow ? (short ? 1 : 2) : 0;
+    const sz = short ? 1 : narrow ? 2 : 0;
     const k = this.k = [1, 1.3, 1.9][sz];
     const svg = this.svg, W = 1000, H = [260, 300, 430][sz], skin = o.skin;
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
