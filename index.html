@@ -1,0 +1,1899 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05090c"><title>Fretstorm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Chakra+Petch:wght@400;600;700&display=swap">
+<style>
+/* Layout: one-screen arcade app. Screens stack in the same frame and swap in place.
+   Play screen = HUD / prompt / tilted fretboard / piano-style answer pad. Dark single look, school teal accent. */
+:root {
+  --ink: #05090c;
+  --panel: #0c161b;
+  --panel-2: #122229;
+  --line: #21404a;
+  --teal-deep: #006d75;
+  --accent: #1fc8cf;
+  --accent-2: #8ff3f0;
+  --silver: #c8d3d8;
+  --text: #eef6f7;
+  --muted: #8ea7ae;
+  --gold: #ffcb4d;
+  --good: #3ee591;
+  --bad: #ff5b6c;
+  --hot: #ff7a2f;
+  --display: 'Bungee', 'Arial Black', Impact, sans-serif;
+  --body: 'Chakra Petch', 'Segoe UI', system-ui, sans-serif;
+  --r: 14px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--ink); color: var(--text);
+  font-family: var(--body); font-size: 16px; line-height: 1.4;
+  overflow: hidden; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none;
+}
+input, textarea, select { user-select: text; -webkit-user-select: text; font-family: var(--body); }
+#bg { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; display: block; }
+#fx { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 60; pointer-events: none; display: block; }
+#flash { position: fixed; inset: 0; z-index: 55; pointer-events: none; opacity: 0; transition: opacity .35s; }
+#app { position: fixed; inset: 0; z-index: 10; }
+#app.shake { animation: shake .38s cubic-bezier(.36,.07,.19,.97); }
+@keyframes shake {
+  10%, 90% { transform: translate(-2px, 1px); } 20%, 80% { transform: translate(4px, -2px); }
+  30%, 50%, 70% { transform: translate(-6px, 2px); } 40%, 60% { transform: translate(6px, -1px); }
+}
+.screen {
+  position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-top: calc(env(safe-area-inset-top, 0px) + 14px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
+  display: flex; flex-direction: column; align-items: center;
+  animation: screenIn .35s ease-out;
+}
+@keyframes screenIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.wrap { width: 100%; max-width: 1100px; display: flex; flex-direction: column; gap: 14px; }
+h1, h2, h3 { font-family: var(--display); font-weight: 400; margin: 0; letter-spacing: .02em; text-wrap: balance; }
+h2 { font-size: clamp(22px, 4vw, 32px); }
+h3 { font-size: 18px; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.spacer { flex: 1; }
+.eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: .14em; color: var(--accent-2); font-weight: 700; }
+
+/* Buttons */
+.btn {
+  font-family: var(--display); font-size: 17px; letter-spacing: .03em; color: #04161a;
+  background: linear-gradient(180deg, var(--accent-2), var(--accent)); border: 0; border-radius: 12px;
+  padding: 13px 22px; cursor: pointer; box-shadow: 0 4px 0 var(--teal-deep), 0 0 24px color-mix(in srgb, var(--accent) 35%, transparent);
+  transition: transform .08s, box-shadow .08s, filter .2s;
+}
+.btn:hover { filter: brightness(1.1); }
+.btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--teal-deep); }
+.btn:disabled { filter: grayscale(1) brightness(.6); cursor: not-allowed; }
+.btn.ghost { background: var(--panel-2); color: var(--text); box-shadow: 0 3px 0 #000, inset 0 0 0 1px var(--line); }
+.btn.gold { background: linear-gradient(180deg, #ffe39a, var(--gold)); box-shadow: 0 4px 0 #9a6a00, 0 0 24px rgba(255,203,77,.4); }
+.btn.small { font-size: 14px; padding: 9px 14px; }
+.iconbtn {
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 10px;
+  min-width: 42px; height: 42px; padding: 0 12px; font: 700 15px var(--body); cursor: pointer;
+}
+.iconbtn:hover { border-color: var(--accent); }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .node:focus-visible {
+  outline: 3px solid var(--gold); outline-offset: 2px;
+}
+.card {
+  background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 18px; backdrop-filter: blur(6px);
+}
+
+/* Title */
+#title { justify-content: center; }
+.title-box { width: 100%; max-width: 720px; display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; }
+.logo {
+  font-family: var(--display); font-size: clamp(50px, 13vw, 124px); line-height: .9; margin: 0;
+  background: linear-gradient(180deg, #ffffff 10%, var(--silver) 45%, var(--accent) 52%, var(--teal-deep) 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 22px color-mix(in srgb, var(--accent) 45%, transparent)) drop-shadow(0 6px 0 #000);
+}
+.tagline { color: var(--silver); font-size: 17px; max-width: 34em; }
+#titleStrings { width: 100%; max-width: 620px; height: 96px; cursor: pointer; display: block; }
+.player-chip { display: flex; gap: 14px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.rank { font-family: var(--display); font-size: 15px; color: var(--gold); }
+.xpbar { width: min(320px, 80vw); height: 10px; background: #0007; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.xpbar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--gold)); transition: width .8s cubic-bezier(.2,.8,.2,1); }
+.streak { font-weight: 700; color: var(--hot); }
+.menu { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; max-width: 460px; }
+.menu .btn.big { grid-column: 1 / -1; font-size: 24px; padding: 18px; }
+.name-form { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.field {
+  background: #0009; border: 1px solid var(--line); color: var(--text); border-radius: 10px;
+  padding: 12px 14px; font-size: 17px; min-width: 0;
+}
+.field:focus { border-color: var(--accent); outline: none; }
+
+/* Top bar for menu screens */
+.topbar { display: flex; align-items: center; gap: 12px; width: 100%; }
+.topbar h2 { flex: 1; min-width: 0; }
+
+/* World map */
+.world {
+  position: relative; border-radius: 18px; padding: 18px; overflow: hidden; border: 1px solid var(--line);
+  background: linear-gradient(135deg, var(--w1, #123), var(--w2, #012));
+}
+.world.locked { filter: grayscale(.85) brightness(.55); }
+.world-head { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.world-head h3 { font-size: clamp(18px, 3vw, 24px); }
+.world-sub { color: var(--silver); font-size: 14px; margin-top: 4px; }
+.world-stars { margin-left: auto; font-weight: 700; color: var(--gold); white-space: nowrap; }
+.nodes { display: flex; flex-wrap: wrap; gap: 14px 10px; margin-top: 16px; align-items: center; }
+.node {
+  position: relative; width: 74px; height: 74px; border-radius: 50%; border: 3px solid #ffffff30; cursor: pointer;
+  background: radial-gradient(circle at 35% 30%, #ffffff40, #0000 45%), var(--panel-2); color: var(--text);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  font-family: var(--display); font-size: 18px; transition: transform .15s; padding: 0;
+}
+.node:hover { transform: scale(1.07); }
+.node .st { font-family: var(--body); font-size: 11px; letter-spacing: 1px; color: var(--gold); }
+.node.done { border-color: var(--gold); }
+.node.next { border-color: var(--accent); box-shadow: 0 0 0 0 var(--accent); animation: pulse 1.6s infinite; }
+.node.lock { cursor: not-allowed; opacity: .45; }
+.node.boss { width: 92px; height: 92px; border-radius: 22px; background: linear-gradient(160deg, #3a0d16, #160309); border-color: #ff5b6c80; }
+.node.boss svg { width: 54px; height: 54px; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 70%, transparent); } 100% { box-shadow: 0 0 0 16px transparent; } }
+.link { width: 16px; height: 3px; background: #ffffff30; border-radius: 2px; }
+
+/* Play screen */
+#play { padding-top: calc(env(safe-area-inset-top, 0px) + 10px); }
+.hud { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; width: 100%; }
+.hud-mid { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.hud-title { font-family: var(--display); font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.progress { height: 8px; border-radius: 5px; background: #0008; overflow: hidden; border: 1px solid var(--line); }
+.progress > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+.hud-right { display: flex; gap: 12px; align-items: center; }
+.score { font-family: var(--display); font-size: 22px; font-variant-numeric: tabular-nums; min-width: 4ch; text-align: right; }
+.combo {
+  font-family: var(--display); font-size: 15px; padding: 6px 10px; border-radius: 10px; background: var(--panel-2);
+  border: 1px solid var(--line); min-width: 62px; text-align: center; transition: transform .15s;
+}
+.combo.hot { background: linear-gradient(90deg, #ff3d00, var(--hot), var(--gold), var(--hot), #ff3d00); background-size: 300% 100%; color: #1a0500; animation: fire 1.2s linear infinite; border-color: var(--gold); }
+.combo.bump { transform: scale(1.25); }
+@keyframes fire { to { background-position: 300% 0; } }
+.stage { width: 100%; max-width: 1100px; display: flex; flex-direction: column; gap: 12px; align-items: center; margin-top: 10px; }
+.prompt { text-align: center; font-size: clamp(18px, 3.2vw, 26px); font-weight: 600; min-height: 1.5em; }
+.prompt b { font-family: var(--display); font-weight: 400; color: var(--gold); font-size: 1.35em; padding: 0 .1em; }
+.prompt .str { color: var(--accent-2); font-weight: 700; }
+.timer { width: min(520px, 100%); height: 6px; border-radius: 4px; background: #0008; overflow: hidden; }
+.timer > i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--bad), var(--gold), var(--good)); background-size: 520px 100%; transform-origin: left; }
+.board-wrap { width: 100%; perspective: 1400px; }
+#board { width: 100%; display: block; transform: rotateX(14deg); transform-origin: 50% 100%; border-radius: 10px; transition: filter .3s; filter: drop-shadow(0 18px 18px #000c); overflow: visible; }
+.board-wrap.glow #board { filter: drop-shadow(0 18px 18px #000c) drop-shadow(0 0 14px color-mix(in srgb, var(--accent) 70%, transparent)); }
+.board-wrap.fire #board { filter: drop-shadow(0 18px 18px #000c) drop-shadow(0 0 22px var(--hot)); }
+.cell { cursor: pointer; fill: transparent; }
+.cell:hover { fill: #ffffff14; }
+.cell.off { cursor: default; }
+.cell.off:hover { fill: transparent; }
+.feedback { min-height: 1.6em; text-align: center; font-weight: 600; color: var(--silver); display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; align-items: center; }
+.hint-chip { font-family: var(--display); font-size: 13px; padding: 3px 8px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line); }
+.hint-chip.end { background: var(--good); color: #032; border-color: var(--good); }
+.hint-arrow { color: var(--muted); }
+
+/* Piano-style answer pad: 7 natural keys, sharps/flats between them */
+.pad { width: 100%; max-width: 760px; display: grid; grid-template-columns: repeat(14, 1fr); grid-template-rows: auto auto; gap: 6px 4px; }
+.key {
+  border: 0; border-radius: 12px; cursor: pointer; font-family: var(--display); font-size: clamp(18px, 3.4vw, 26px);
+  padding: 14px 0; transition: transform .07s, filter .15s; position: relative;
+}
+.key.nat { grid-row: 2; grid-column: span 2; background: linear-gradient(180deg, #ffffff, #c5d2d7); color: #0b1418; box-shadow: 0 4px 0 #6d7f86; }
+.key.acc { grid-row: 1; grid-column: span 2; background: linear-gradient(180deg, #2a3c44, #0f1a1f); color: var(--accent-2); box-shadow: 0 4px 0 #000, inset 0 0 0 1px var(--line); font-size: clamp(12px, 2.2vw, 16px); padding: 10px 0; line-height: 1.1; }
+.key:active { transform: translateY(3px); }
+.key.good { background: var(--good) !important; color: #022 !important; }
+.key.bad { background: var(--bad) !important; color: #200 !important; animation: nope .3s; }
+.key kbd { position: absolute; right: 7px; bottom: 4px; font: 600 10px var(--body); opacity: .45; }
+.pad.naturals-only .key.acc { visibility: hidden; }
+.pad.naturals-only { grid-template-rows: 0 auto; row-gap: 0; }
+@keyframes nope { 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+
+/* Boss */
+.boss-bar { width: 100%; display: flex; align-items: center; gap: 14px; }
+.boss-art { width: 96px; height: 96px; flex: none; }
+.boss-art svg { width: 100%; height: 100%; overflow: visible; }
+.boss-art.hit svg { animation: bosshit .4s; }
+.boss-art.angry svg { animation: wobble 1.2s ease-in-out infinite; }
+@keyframes bosshit { 0% { filter: brightness(4); transform: translateX(8px) scale(.94); } 100% { filter: none; transform: none; } }
+@keyframes wobble { 50% { transform: rotate(-4deg) scale(1.04); } }
+.boss-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.boss-name { font-family: var(--display); font-size: clamp(14px, 2.5vw, 19px); color: #ffb3bb; }
+.hp { height: 14px; border-radius: 7px; background: #2a050b; border: 1px solid #ff5b6c80; overflow: hidden; }
+.hp > i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #ff2a4b, #ff8a5b); transition: width .35s cubic-bezier(.2,.8,.2,1); }
+.hearts { font-size: 22px; letter-spacing: 2px; color: var(--bad); white-space: nowrap; }
+.hearts .gone { color: #ffffff25; }
+
+/* Results */
+.results { max-width: 620px; width: 100%; text-align: center; display: flex; flex-direction: column; gap: 16px; align-items: center; }
+.stars { display: flex; gap: 10px; justify-content: center; }
+.star { font-size: 64px; line-height: 1; color: #ffffff1f; transform: scale(.4); transition: transform .4s cubic-bezier(.3,1.8,.4,1), color .2s; }
+.star.on { color: var(--gold); transform: scale(1); text-shadow: 0 0 24px #ffcb4d99; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; width: 100%; }
+.stat { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+.stat b { display: block; font-family: var(--display); font-size: 24px; font-variant-numeric: tabular-nums; font-weight: 400; }
+.stat span { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.review { width: 100%; text-align: left; }
+.review ul { margin: 8px 0 0; padding-left: 18px; color: var(--silver); }
+.big-word { font-family: var(--display); font-size: clamp(34px, 8vw, 60px); line-height: 1; }
+
+/* Modal + toasts + floaters */
+.modal { position: fixed; inset: 0; z-index: 70; background: #000b; display: flex; align-items: center; justify-content: center; padding: 16px; animation: screenIn .25s; }
+.modal .card { width: 100%; max-width: 560px; max-height: 90%; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+.lesson-art { width: 100%; }
+#toasts { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 12px); left: 50%; transform: translateX(-50%); z-index: 80; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; width: min(92vw, 420px); }
+.toast { background: linear-gradient(90deg, #1b2b10, #0c1a20); border: 1px solid var(--gold); border-radius: 12px; padding: 10px 14px; display: flex; gap: 10px; align-items: center; box-shadow: 0 8px 30px #000a; animation: toastIn .4s cubic-bezier(.3,1.6,.5,1), toastOut .4s 3.2s forwards; width: 100%; }
+.toast .ti { font-size: 26px; }
+.toast b { font-family: var(--display); font-weight: 400; color: var(--gold); display: block; }
+@keyframes toastIn { from { transform: translateY(-30px) scale(.8); opacity: 0; } }
+@keyframes toastOut { to { transform: translateY(-20px); opacity: 0; } }
+.floater { position: fixed; z-index: 65; pointer-events: none; font-family: var(--display); font-size: 26px; color: var(--gold); text-shadow: 0 3px 0 #000, 0 0 14px #000; animation: floatUp 1s ease-out forwards; transform: translate(-50%, -50%); white-space: nowrap; }
+.floater.big { font-size: 44px; color: var(--accent-2); }
+.floater.bad { color: var(--bad); }
+@keyframes floatUp { 0% { opacity: 0; transform: translate(-50%, -20%) scale(.6); } 15% { opacity: 1; transform: translate(-50%, -60%) scale(1.1); } 100% { opacity: 0; transform: translate(-50%, -160%) scale(1); } }
+.levelup { position: fixed; inset: 0; z-index: 75; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: radial-gradient(circle, #0b3a40ee, #000e 70%); text-align: center; padding: 16px; animation: screenIn .3s; }
+.levelup .big-word { color: var(--gold); text-shadow: 0 0 30px var(--gold); animation: pop .6s cubic-bezier(.3,1.8,.4,1); }
+@keyframes pop { from { transform: scale(.3); } }
+
+/* My Neck, trophies, settings */
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.meter { display: grid; grid-template-columns: 7.5em 1fr 3.5em; gap: 10px; align-items: center; font-size: 14px; }
+.meter .bar { height: 10px; background: #0008; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); }
+.meter .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--bad), var(--gold), var(--good)); background-size: 300px 100%; }
+.meter b { text-align: right; font-variant-numeric: tabular-nums; }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+.ach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.ach { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+.ach .ti { font-size: 28px; }
+.ach b { font-family: var(--display); font-weight: 400; font-size: 14px; }
+.ach small { color: var(--muted); font-size: 12px; }
+.ach.locked { opacity: .38; filter: grayscale(1); }
+.skins { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.skin { border: 2px solid var(--line); border-radius: 12px; padding: 0; overflow: hidden; background: var(--panel-2); cursor: pointer; color: var(--text); text-align: left; font: inherit; }
+.skin .sw { height: 46px; }
+.skin div.lbl { padding: 8px 10px; font-size: 13px; }
+.skin div.lbl b { display: block; font-family: var(--display); font-weight: 400; font-size: 14px; }
+.skin.sel { border-color: var(--gold); box-shadow: 0 0 16px #ffcb4d66; }
+.skin:disabled { cursor: not-allowed; opacity: .4; }
+.set-row { display: flex; align-items: center; gap: 12px; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.set-row:last-child { border-bottom: 0; }
+.set-row label { flex: 1; min-width: 0; }
+.set-row small { display: block; color: var(--muted); }
+.switch { appearance: none; -webkit-appearance: none; width: 50px; height: 28px; border-radius: 16px; background: #233; position: relative; cursor: pointer; flex: none; border: 1px solid var(--line); }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--silver); transition: left .2s; }
+.switch:checked { background: var(--teal-deep); }
+.switch:checked::after { left: 25px; background: var(--accent-2); }
+textarea.field { width: 100%; min-height: 110px; font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace; resize: vertical; }
+pre.report { white-space: pre-wrap; background: #0009; border: 1px solid var(--line); border-radius: 10px; padding: 12px; font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; margin: 0; user-select: text; -webkit-user-select: text; }
+.rotate-tip { display: none; font-size: 13px; color: var(--muted); text-align: center; }
+@media (max-width: 520px) and (orientation: portrait) { .rotate-tip { display: block; } }
+@media (max-width: 560px) {
+  .hud-right { gap: 8px; } .score { font-size: 18px; } .combo { min-width: 50px; font-size: 13px; padding: 5px 7px; }
+  .node { width: 62px; height: 62px; font-size: 15px; } .node.boss { width: 76px; height: 76px; }
+  .key { border-radius: 9px; } .meter { grid-template-columns: 6em 1fr 3em; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+body.reduce *, body.reduce *::before, body.reduce *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+/* Fixes from play-testing */
+#title { justify-content: flex-start; }
+.title-box { margin-block: auto; }
+.modal .card > * { flex-shrink: 0; }
+.lesson-art { display: block; height: auto; }
+@media (max-width: 700px), (hover: none) { .key kbd { display: none; } }
+/* Sideways phones: board on the left, answer keys on the right, everything on one screen */
+@media (max-height: 520px) and (orientation: landscape) {
+  #play { padding-top: calc(env(safe-area-inset-top, 0px) + 6px); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 6px); }
+  #play .wrap { gap: 6px; }
+  .hud .iconbtn { height: 34px; min-width: 36px; }
+  .hud-title { font-size: 13px; }
+  .score { font-size: 18px; }
+  .boss-art { width: 44px; height: 44px; }
+  .hearts { font-size: 17px; }
+  .stage {
+    margin-top: 4px; gap: 6px 14px; display: grid; align-items: center;
+    grid-template-columns: minmax(0, 1fr) minmax(210px, 32%);
+    grid-template-areas: "prompt prompt" "timer timer" "board pad" "board feedback";
+  }
+  #play.nopad .stage { grid-template-columns: minmax(0, 1fr); grid-template-areas: "prompt" "timer" "board" "feedback"; }
+  .prompt { grid-area: prompt; font-size: 17px; min-height: 0; }
+  .timer { grid-area: timer; justify-self: center; }
+  .board-wrap { grid-area: board; }
+  #board { transform: rotateX(8deg); }
+  .pad { grid-area: pad; gap: 5px 3px; }
+  .key { padding: 10px 0; font-size: 18px; border-radius: 9px; }
+  .key.acc { padding: 6px 0; font-size: 11px; }
+  .feedback { grid-area: feedback; font-size: 13px; align-self: start; }
+  .hint-chip { font-size: 11px; padding: 2px 6px; }
+  .rotate-tip { display: none !important; }
+}
+</style></head><body>
+<canvas id="bg" aria-hidden="true"></canvas>
+<div id="flash" aria-hidden="true"></div>
+<div id="app">
+
+  <section id="title" class="screen">
+    <div class="title-box">
+      <div class="eyebrow">EV Guitar · Fretboard Training</div>
+      <h1 class="logo">FRET<br>STORM</h1>
+      <svg id="titleStrings" viewBox="0 0 620 96" role="img" aria-label="Six guitar strings. Tap one to hear it."></svg>
+      <p class="tagline">Learn every note on the neck. Clear eight worlds, beat the bosses, and build a streak so hot the band joins in.</p>
+      <form id="nameForm" class="name-form" hidden>
+        <input id="nameInput" class="field" maxlength="24" placeholder="Your first name" autocomplete="off" aria-label="Your first name">
+        <button class="btn" type="submit">Let's go</button>
+      </form>
+      <div id="playerBox" class="player-chip" hidden>
+        <div class="row" style="justify-content:center"><b id="pName"></b><span class="rank" id="pRank"></span></div>
+        <div class="xpbar" title="Experience"><i id="pXp"></i></div>
+        <div class="row" style="justify-content:center"><span class="muted" id="pLevel"></span><span class="streak" id="pStreak"></span></div>
+      </div>
+      <div class="menu" id="mainMenu" hidden>
+        <button class="btn big" id="btnPlay" type="button">Play</button>
+        <button class="btn ghost" id="btnRush" type="button">Fret Rush</button>
+        <button class="btn ghost" id="btnNeck" type="button">My Neck</button>
+        <button class="btn ghost" id="btnTrophies" type="button">Trophies</button>
+        <button class="btn ghost" id="btnSettings" type="button">Settings</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="map" class="screen" hidden>
+    <div class="wrap">
+      <div class="topbar">
+        <button class="iconbtn" data-go="title" type="button" aria-label="Back to menu">←</button>
+        <h2>World Map</h2>
+        <span class="rank" id="mapStars"></span>
+      </div>
+      <div id="worlds" class="wrap"></div>
+    </div>
+  </section>
+
+  <section id="play" class="screen" hidden>
+    <div class="wrap">
+      <div class="hud">
+        <button class="iconbtn" id="btnPause" type="button" aria-label="Pause">❚❚</button>
+        <div class="hud-mid">
+          <div class="hud-title" id="hudTitle"></div>
+          <div class="progress"><i id="hudProg"></i></div>
+        </div>
+        <div class="hud-right">
+          <div class="combo" id="hudCombo" title="Score multiplier">x1</div>
+          <div class="score" id="hudScore">0</div>
+        </div>
+      </div>
+      <div class="boss-bar" id="bossBar" hidden>
+        <div class="boss-art" id="bossArt"></div>
+        <div class="boss-info">
+          <div class="boss-name" id="bossName"></div>
+          <div class="hp"><i id="bossHp"></i></div>
+        </div>
+        <div class="hearts" id="hearts"></div>
+      </div>
+    </div>
+    <div class="stage">
+      <div class="prompt" id="prompt" aria-live="polite"></div>
+      <div class="timer" id="timer"><i id="timerBar"></i></div>
+      <div class="board-wrap" id="boardWrap"><svg id="board" viewBox="0 0 1000 260" role="img" aria-label="Guitar fretboard"></svg></div>
+      <div class="feedback" id="feedback" aria-live="polite"></div>
+      <div class="pad" id="pad"></div>
+      <div class="rotate-tip">Tip: turn your phone sideways for a bigger fretboard.</div>
+    </div>
+  </section>
+
+  <section id="results" class="screen" hidden>
+    <div class="results" id="resultsBox"></div>
+  </section>
+
+  <section id="neck" class="screen" hidden>
+    <div class="wrap">
+      <div class="topbar">
+        <button class="iconbtn" data-go="title" type="button" aria-label="Back to menu">←</button>
+        <h2>My Neck</h2>
+        <button class="btn small" id="btnWeak" type="button">Practice weak spots</button>
+      </div>
+      <p class="muted">Every spot on your guitar, colored by how well you know it. Tap any spot to hear it and see your stats.</p>
+      <div class="board-wrap"><svg id="neckBoard" viewBox="0 0 1000 260" role="img" aria-label="Mastery map of the fretboard"></svg></div>
+      <div class="legend">
+        <span><i style="background:#2a3940"></i>Not tried yet</span>
+        <span><i style="background:#ff5b6c"></i>Shaky</span>
+        <span><i style="background:#ffcb4d"></i>Getting there</span>
+        <span><i style="background:#3ee591"></i>Solid</span>
+        <span><i style="background:#8ff3f0;box-shadow:0 0 8px #8ff3f0"></i>Mastered</span>
+      </div>
+      <div class="feedback" id="neckInfo"></div>
+      <div class="grid2">
+        <div class="card"><h3>By string</h3><div id="neckStrings" style="display:flex;flex-direction:column;gap:8px;margin-top:12px"></div></div>
+        <div class="card"><h3>By note</h3><div id="neckNotes" style="display:flex;flex-direction:column;gap:8px;margin-top:12px"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="trophies" class="screen" hidden>
+    <div class="wrap">
+      <div class="topbar">
+        <button class="iconbtn" data-go="title" type="button" aria-label="Back to menu">←</button>
+        <h2>Trophies</h2>
+        <span class="rank" id="achCount"></span>
+      </div>
+      <h3>Fretboard skins</h3>
+      <p class="muted">Level up to unlock new looks for your neck.</p>
+      <div class="skins" id="skins"></div>
+      <h3 style="margin-top:8px">Achievements</h3>
+      <div class="ach-grid" id="achGrid"></div>
+    </div>
+  </section>
+
+  <section id="settings" class="screen" hidden>
+    <div class="wrap" style="max-width:760px">
+      <div class="topbar">
+        <button class="iconbtn" data-go="title" type="button" aria-label="Back to menu">←</button>
+        <h2>Settings</h2>
+      </div>
+      <div class="card" id="setMain"></div>
+      <div class="card" id="setReport"></div>
+      <div class="card" id="setSave"></div>
+      <div class="card" id="setTeacher"></div>
+    </div>
+  </section>
+
+</div>
+<div id="modalRoot"></div>
+<div id="toasts" aria-live="polite"></div>
+<canvas id="fx" aria-hidden="true"></canvas>
+<script>
+// ===== FRETSTORM: music data, worlds, levels, rewards =====
+const SHARP = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+const FLAT  = ['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
+const NATURAL = [true,false,true,false,true,true,false,true,false,true,false,true];
+// String index 0 = low E (6th string) ... 5 = high E (1st string)
+const OPEN_PC   = [4, 9, 2, 7, 11, 4];
+const OPEN_MIDI = [40, 45, 50, 55, 59, 64];
+const STRING_NAME = ['low E', 'A', 'D', 'G', 'B', 'high E'];
+const STRING_NUM  = ['6th', '5th', '4th', '3rd', '2nd', '1st'];
+const ALL = [0,1,2,3,4,5];
+
+const pcOf = (s, f) => (OPEN_PC[s] + f) % 12;
+const midiOf = (s, f) => OPEN_MIDI[s] + f;
+const isNat = pc => NATURAL[pc];
+function noteName(pc, pref) { // pref: 'sharp' | 'flat' | 'both'
+  if (NATURAL[pc]) return SHARP[pc];
+  if (pref === 'sharp') return SHARP[pc];
+  if (pref === 'flat') return FLAT[pc];
+  return SHARP[pc] + '/' + FLAT[pc];
+}
+const stringLabel = s => `${STRING_NAME[s]} string <span class="muted">(${STRING_NUM[s]})</span>`;
+
+// ---- Worlds ----
+// labels: what is printed beside each string ('names' gives away open notes, so worlds 1 and 5+ use numbers)
+// nums: fret numbers under the board (the Arena and beyond take the training wheels off)
+const WORLDS = [
+  { n: 1, name: 'The Bedroom', sub: 'Open strings', labels: 'numbers', nums: true,
+    bg: ['#2a170c', '#070302'], fx: ['motes', 'bokeh'], accent: ['#ffb35c', '#ffe2b0', '#8a4b12'],
+    music: { bpm: 84, prog: [[40,'m'],[36,'M'],[43,'M'],[38,'M']] },
+    lesson: { title: 'Six strings, six names',
+      body: ['From the thickest string to the thinnest: <b>E A D G B E</b>.',
+             'One way to remember it: <b>E</b>ddie <b>A</b>te <b>D</b>ynamite, <b>G</b>ood <b>B</b>ye <b>E</b>ddie.',
+             'In this game the thin high E string is on top and the thick low E is on the bottom, the way you see the neck when you look down at your guitar.'],
+      marks: [[0,0],[1,0],[2,0],[3,0],[4,0],[5,0]], view: 5 } },
+  { n: 2, name: 'Low E Street', sub: 'The 6th string', labels: 'names', nums: true,
+    bg: ['#0f1b24', '#030507'], fx: ['sparks', 'eq'], accent: ['#ff8a3d', '#ffd2ad', '#8a3a0a'],
+    music: { bpm: 96, prog: [[40,'5'],[43,'5'],[45,'5'],[43,'5']] },
+    lesson: { title: 'The musical alphabet',
+      body: ['Notes use only seven letters: <b>A B C D E F G</b>, and then the alphabet starts over.',
+             'Most neighbors are <b>2 frets</b> apart. Two pairs are only <b>1 fret</b> apart: <b>B→C</b> and <b>E→F</b>.',
+             'So the low E string goes E (open), F (1), G (3), A (5), B (7), C (8), D (10), and E again at 12.'],
+      marks: [[0,0],[0,1],[0,3],[0,5],[0,7],[0,8],[0,10],[0,12]], view: 12 } },
+  { n: 3, name: 'A-String Alley', sub: 'The 5th string', labels: 'names', nums: true,
+    bg: ['#220a30', '#06020b'], fx: ['bokeh', 'eq'], accent: ['#d46bff', '#f1cbff', '#5d1a80'],
+    music: { bpm: 104, prog: [[45,'m'],[41,'M'],[36,'M'],[43,'M']] },
+    lesson: { title: 'Same alphabet, new start',
+      body: ['The A string goes A (open), B (2), C (3), D (5), E (7), F (8), G (10), A (12).',
+             '<b>Fret 12 is always the open note again</b>, one octave higher. Look for the double dots.',
+             'Together, the low E and A strings hold the root notes of most barre chords, which is why we learn them first.'],
+      marks: [[1,0],[1,2],[1,3],[1,5],[1,7],[1,8],[1,10],[1,12]], view: 12 } },
+  { n: 4, name: 'The Deep End', sub: 'D and G strings', labels: 'names', nums: true,
+    bg: ['#02303a', '#00080c'], fx: ['bubbles', 'rays'], accent: ['#1fc8cf', '#8ff3f0', '#006d75'],
+    music: { bpm: 92, prog: [[38,'m'],[46,'M'],[41,'M'],[36,'M']] },
+    lesson: { title: 'The octave shape',
+      body: ['The D and G strings follow the same rules. Count up from the open note, and remember B→C and E→F are 1 fret apart.',
+             '<b>Octave shape:</b> from a note on the low E or A string, skip one string and go up 2 frets. Same note, one octave higher.',
+             'New mode, <b>Note Hunt</b>: find every copy of a note on the neck.'],
+      marks: [[0,3],[2,5],[1,3],[3,5]], view: 7 } },
+  { n: 5, name: 'High Strings Heights', sub: 'B and high E strings', labels: 'numbers', nums: true,
+    bg: ['#1b2b5e', '#08081c'], fx: ['aurora', 'motes'], accent: ['#7ab8ff', '#d2e7ff', '#1d4f99'],
+    music: { bpm: 110, prog: [[36,'M'],[43,'M'],[45,'m'],[41,'M']] },
+    lesson: { title: 'Learn one, get one free',
+      body: ['The high E string has <b>exactly the same notes</b> as the low E string. You already know it.',
+             'The B string goes B (open), C (1), D (3), E (5), F (6), G (8), A (10), B (12).',
+             'String names are now shown as numbers, so you have to know which string is which.'],
+      marks: [[5,0],[5,1],[5,3],[5,5],[4,0],[4,1],[4,3],[4,5]], view: 7 } },
+  { n: 6, name: 'Sharp & Flat Factory', sub: 'The in-between frets', labels: 'numbers', nums: true,
+    bg: ['#2c1706', '#080401'], fx: ['sparks', 'eq'], accent: ['#ffcb4d', '#fff0bf', '#8a6500'],
+    music: { bpm: 116, prog: [[40,'5'],[43,'5'],[45,'5'],[36,'5']] },
+    lesson: { title: 'Two names, one fret',
+      body: ['The frets between natural notes have two names. <b>Sharp (♯)</b> means one fret higher. <b>Flat (♭)</b> means one fret lower.',
+             'The fret between F and G is <b>F♯</b>, and it is also <b>G♭</b>. Same sound, two names.',
+             'There is no fret between B and C, or between E and F.'],
+      marks: [[0,1],[0,2],[0,3]], view: 5 } },
+  { n: 7, name: 'The Arena', sub: 'Everything, faster', labels: 'numbers', nums: false,
+    bg: ['#18061c', '#020103'], fx: ['beams', 'crowd'], accent: ['#ff4d6d', '#ffc4cf', '#8a0f27'],
+    music: { bpm: 128, prog: [[40,'m'],[38,'M'],[36,'M'],[47,'M']] },
+    lesson: { title: 'No more training wheels',
+      body: ['Fret numbers are gone. Use the dots, the way you would on a real guitar.',
+             'Single dots sit at frets <b>3, 5, 7 and 9</b>. The double dot is fret <b>12</b>.',
+             'The crowd is watching. Keep your combo alive.'],
+      marks: [], view: 12 } },
+  { n: 8, name: 'Beyond the 12th', sub: 'Frets 0 to 15', labels: 'numbers', nums: false,
+    bg: ['#06031e', '#000000'], fx: ['stars'], accent: ['#a27dff', '#e3d9ff', '#3c1f99'],
+    music: { bpm: 136, prog: [[45,'m'],[43,'M'],[41,'M'],[40,'M']] },
+    lesson: { title: 'The pattern repeats',
+      body: ['Past the 12th fret, everything starts over. Fret 13 is the same note as fret 1. Fret 15 is the same as fret 3.',
+             'The shortcut: <b>subtract 12</b>.',
+             'Beat this world and you know the whole neck.'],
+      marks: [[0,1],[0,13],[0,3],[0,15]], view: 15 } },
+];
+
+// ---- Levels ----
+function L(id, name, desc, o) {
+  return Object.assign({ id, name, desc, world: +id[0], modes: ['name'], strings: ALL, frets: [0, 12],
+    acc: false, n: 10, timer: 0, target: 3 }, o);
+}
+const LEVELS = [
+  L('1-1', 'Meet the Strings', 'Name each open string.', { frets: [0, 0], target: 3 }),
+  L('1-2', 'String Finder', 'Tap the open string that gets called.', { modes: ['find'], frets: [0, 0] }),
+  L('1-3', 'Open Mix', 'Name and find open strings against the clock.', { modes: ['name', 'find'], frets: [0, 0], timer: 6, n: 12, target: 2.5 }),
+  L('2-1', 'First Five Frets', 'Name notes on the low E string, frets 0–5.', { strings: [0], frets: [0, 5] }),
+  L('2-2', 'Climb to Twelve', 'Name notes on the low E string, frets 5–12.', { strings: [0], frets: [5, 12] }),
+  L('2-3', 'Root Hunter', 'Find notes on the low E string.', { modes: ['find'], strings: [0] }),
+  L('2-4', 'Low E Remix', 'Name and find, low E string, on the clock.', { modes: ['name', 'find'], strings: [0], timer: 6, n: 12 }),
+  L('3-1', 'A-String Start', 'Name notes on the A string, frets 0–5.', { strings: [1], frets: [0, 5] }),
+  L('3-2', 'A-String Climb', 'Name notes on the A string, frets 5–12.', { strings: [1], frets: [5, 12] }),
+  L('3-3', 'A-String Finder', 'Find notes on the A string.', { modes: ['find'], strings: [1] }),
+  L('3-4', 'Root Note Remix', 'Low E and A strings together, on the clock.', { modes: ['name', 'find'], strings: [0, 1], timer: 6, n: 14 }),
+  L('4-1', 'D String Dive', 'Name notes on the D string.', { strings: [2], n: 12, target: 2.8 }),
+  L('4-2', 'G String Glide', 'Name notes on the G string.', { strings: [3], n: 12, target: 2.8 }),
+  L('4-3', 'Middle Finder', 'Find notes on the D and G strings.', { modes: ['find'], strings: [2, 3], n: 12, target: 2.8 }),
+  L('4-4', 'Note Hunt', 'Find every copy of a note on the bottom four strings.', { modes: ['hunt'], strings: [0, 1, 2, 3], n: 5, target: 2.5 }),
+  L('5-1', 'High E Déjà Vu', 'Name notes on the high E string.', { strings: [5], n: 12, target: 2.8 }),
+  L('5-2', 'B String Bridge', 'Name notes on the B string.', { strings: [4], n: 12, target: 2.8 }),
+  L('5-3', 'Treble Finder', 'Find notes on the B and high E strings.', { modes: ['find'], strings: [4, 5], n: 12, target: 2.8 }),
+  L('5-4', 'All Six Strings', 'Name natural notes anywhere, on the clock.', { timer: 6, n: 14, target: 2.6 }),
+  L('5-5', 'Grand Hunt', 'Find every copy of a note on all six strings.', { modes: ['hunt'], n: 5, target: 2.4 }),
+  L('6-1', 'Sharps on Low E', 'Every fret of the low E string, sharps and flats too.', { strings: [0], acc: true, n: 12 }),
+  L('6-2', 'Flats on A', 'Every fret of the A string, sharps and flats too.', { strings: [1], acc: true, n: 12 }),
+  L('6-3', 'In-Betweeners', 'Find sharps and flats on the low E and A strings.', { modes: ['find'], strings: [0, 1], acc: true, n: 12 }),
+  L('6-4', 'Accidental Avalanche', 'Name any note on any string.', { acc: true, n: 14 }),
+  L('6-5', 'Chromatic Chase', 'Find any note on any string, on the clock.', { modes: ['find'], acc: true, timer: 6, n: 14 }),
+  L('7-1', 'Spotlight', 'Name any note. Less time, no fret numbers.', { acc: true, timer: 5, n: 15, target: 2.2 }),
+  L('7-2', 'Encore', 'Find any note. Less time, no fret numbers.', { modes: ['find'], acc: true, timer: 5, n: 15, target: 2.2 }),
+  L('7-3', 'Stadium Hunt', 'Find every copy, sharps and flats included.', { modes: ['hunt'], acc: true, n: 5, target: 2.2 }),
+  L('7-4', 'Lightning Round', 'Twenty notes, three and a half seconds each.', { modes: ['name', 'find'], acc: true, timer: 3.5, n: 20, target: 2 }),
+  L('8-1', 'Past the Double Dots', 'Name notes on frets 12–15.', { frets: [12, 15], acc: true, n: 12, target: 2.6 }),
+  L('8-2', 'Upper Finder', 'Find any note from fret 0 to 15.', { modes: ['find'], frets: [0, 15], acc: true, timer: 6, n: 14, target: 2.5 }),
+  L('8-3', 'The Whole Neck', 'Everything, frets 0–15, on the clock.', { modes: ['name', 'find'], frets: [0, 15], acc: true, timer: 4.5, n: 16, target: 2.2 }),
+];
+
+// look: hue, eyes, horns, fangs, crown, tentacles
+const BOSSES = {
+  1: { name: 'The Tuning Goblin', line: 'He snuck in and un-tuned every string in the house.', hp: 8, hearts: 3, timer: 7, look: { hue: 110, eyes: 1, horns: 1 } },
+  2: { name: 'Muddy Mike', line: 'Lurks down on the low E. Wants every note to sound like mud.', hp: 12, hearts: 3, timer: 6.5, look: { hue: 28, eyes: 2, fangs: 1 } },
+  3: { name: 'Count Capo', line: 'Clamps down on the A string and will not let go.', hp: 14, hearts: 3, timer: 6, look: { hue: 285, eyes: 2, fangs: 1, horns: 1 } },
+  4: { name: 'The Octavian', line: 'Eight arms. One octave. Zero mercy.', hp: 16, hearts: 3, timer: 6, look: { hue: 185, eyes: 2, tentacles: 1 } },
+  5: { name: 'Feedback Phantom', line: 'A screech that haunts the high strings.', hp: 18, hearts: 3, timer: 5.5, look: { hue: 220, eyes: 3 } },
+  6: { name: 'Dr. Accidental', line: 'Turns every note into its sharpest, flattest self.', hp: 20, hearts: 3, timer: 5.5, look: { hue: 330, eyes: 2, horns: 1, fangs: 1 } },
+  7: { name: 'The Shred King', line: 'Plays faster than you can blink. Prove him wrong.', hp: 24, hearts: 3, timer: 4.5, look: { hue: 355, eyes: 2, crown: 1, fangs: 1 } },
+  8: { name: 'The Fretboard Overlord', line: 'Rules every fret from 0 to 15. This is the final fight.', hp: 30, hearts: 4, timer: 4.5, look: { hue: 265, eyes: 5, horns: 1, crown: 1, fangs: 1 } },
+};
+
+const RANKS = [[1,'Rookie'],[3,'Garage Hero'],[5,'Open Mic Regular'],[8,'Session Player'],[12,'Road Warrior'],[16,'Headliner'],[20,'Fretboard Virtuoso'],[25,'Legend of the Neck']];
+const rankFor = lvl => RANKS.filter(r => lvl >= r[0]).pop()[1];
+const xpNeed = lvl => 100 + 50 * (lvl - 1);
+
+const SKINS = [
+  { id: 'rosewood', name: 'Rosewood', lvl: 1, wood: ['#53301c', '#2a140a'], grain: '#170902', inlay: '#f3ecdc', fret: '#d5dce0', str: '#ece6d6', wound: '#c2ab82', nut: '#efe6cf' },
+  { id: 'maple', name: 'Maple', lvl: 3, wood: ['#ecd09d', '#c99d5f'], grain: '#a77940', inlay: '#1d1d1d', fret: '#8c969b', str: '#555b5e', wound: '#6b5a3a', nut: '#f8f2e4' },
+  { id: 'ebony', name: 'Ebony & Abalone', lvl: 5, wood: ['#211d1d', '#0a0808'], grain: '#000000', inlay: '#7fe8d8', fret: '#e2e8ec', str: '#f0ece2', wound: '#c2ab82', nut: '#efe6cf', abalone: true },
+  { id: 'shark', name: 'Shark Bite', lvl: 7, wood: ['#0b434a', '#03171b'], grain: '#012a2f', inlay: '#e6eef1', fret: '#c8d3d8', str: '#eef6f7', wound: '#a9b6bb', nut: '#dfe8ea' },
+  { id: 'neon', name: 'Neon Night', lvl: 10, wood: ['#0d0717', '#04020a'], grain: '#1d0f33', inlay: '#ff2bd6', fret: '#6a5cff', str: '#2ef2ff', wound: '#2ef2ff', nut: '#ff2bd6', glow: true },
+  { id: 'lava', name: 'Lava Flow', lvl: 14, wood: ['#2e0b05', '#120302'], grain: '#ff4d1a', inlay: '#ffb347', fret: '#ffd0a0', str: '#ffe0c0', wound: '#ff9a50', nut: '#ffb347', glow: true, cracks: true },
+  { id: 'galaxy', name: 'Galaxy', lvl: 18, wood: ['#1d0d40', '#060114'], grain: '#ffffff', inlay: '#ffffff', fret: '#b9a8ff', str: '#e9e2ff', wound: '#b9a8ff', nut: '#e9e2ff', glow: true, stars: true },
+  { id: 'gold', name: 'Gold Record', lvl: 24, wood: ['#5c4612', '#2b2005'], grain: '#8a6a1a', inlay: '#fff3c4', fret: '#ffe28a', str: '#ffeab0', wound: '#e7c160', nut: '#fff3c4', glow: true },
+];
+
+const ACHIEVEMENTS = [
+  { id: 'first', icon: '🎵', name: 'First Note', desc: 'Get your first note right.' },
+  { id: 'combo10', icon: '🔥', name: 'On a Roll', desc: 'Hit a 10 combo.' },
+  { id: 'combo25', icon: '☄️', name: 'Unstoppable', desc: 'Hit a 25 combo.' },
+  { id: 'combo50', icon: '🌋', name: 'Fret Machine', desc: 'Hit a 50 combo.' },
+  { id: 'flawless', icon: '💎', name: 'Flawless', desc: 'Finish a level without a single miss.' },
+  { id: 'three', icon: '⭐', name: 'Speed Picker', desc: 'Earn 3 stars on a level.' },
+  { id: 'stars30', icon: '🌟', name: 'Star Collector', desc: 'Collect 30 stars.' },
+  { id: 'boss1', icon: '👺', name: 'Back in Tune', desc: 'Beat the Tuning Goblin.' },
+  { id: 'boss4', icon: '🐙', name: 'Boss Slayer', desc: 'Beat four bosses.' },
+  { id: 'boss8', icon: '👑', name: 'Overlord Down', desc: 'Beat the Fretboard Overlord.' },
+  { id: 'n100', icon: '💯', name: 'Hundred Club', desc: 'Answer 100 notes correctly.' },
+  { id: 'n1000', icon: '🎸', name: 'Thousand Frets', desc: 'Answer 1,000 notes correctly.' },
+  { id: 'sharp', icon: '♯', name: 'Sharp Shooter', desc: 'Get 100 sharps or flats right.' },
+  { id: 'streak3', icon: '📅', name: 'Habit Forming', desc: 'Play three days in a row.' },
+  { id: 'streak7', icon: '🗓️', name: 'Week Warrior', desc: 'Play seven days in a row.' },
+  { id: 'rush25', icon: '⚡', name: 'Rush Hour', desc: 'Score 25 notes in one Fret Rush.' },
+  { id: 'hunter', icon: '🎯', name: 'Sharp Eyes', desc: 'Finish a Note Hunt round with no misses.' },
+  { id: 'master', icon: '🧠', name: 'Neck Master', desc: 'Master 60 spots on the fretboard.' },
+];
+// ===== Sound: plucked strings (Karplus-Strong), effects, and a band that builds with your combo =====
+const Sound = (() => {
+  let ctx = null, master, sfxBus, musicBus, noise;
+  const cache = new Map();
+  const opts = { sfx: true, music: true, vol: 0.8 };
+  const freq = m => 440 * Math.pow(2, (m - 69) / 12);
+
+  function init() {
+    if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
+    try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { ctx = null; return; }
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -14; comp.ratio.value = 4;
+    master = ctx.createGain(); master.connect(comp); comp.connect(ctx.destination);
+    sfxBus = ctx.createGain(); sfxBus.connect(master);
+    musicBus = ctx.createGain(); musicBus.connect(master);
+    noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    apply();
+  }
+  function apply() {
+    if (!ctx) return;
+    master.gain.value = opts.vol;
+    sfxBus.gain.value = opts.sfx ? 1 : 0;
+    musicBus.gain.value = opts.music ? 0.5 : 0;
+  }
+  function set(o) { Object.assign(opts, o); apply(); if (!opts.music) Music.stop(); }
+
+  // Karplus-Strong string: a burst of noise circulating in a short delay line, softened every lap
+  function ks(midi, damp = 0.996, dur = 1.8) {
+    const key = midi + ':' + damp;
+    if (cache.has(key)) return cache.get(key);
+    const sr = ctx.sampleRate, len = Math.floor(sr * dur), N = Math.max(2, Math.round(sr / freq(midi)));
+    const buf = ctx.createBuffer(1, len, sr), out = buf.getChannelData(0), ring = new Float32Array(N);
+    let prev = 0;
+    for (let i = 0; i < N; i++) { const r = Math.random() * 2 - 1; ring[i] = 0.6 * r + 0.4 * prev; prev = ring[i]; }
+    let idx = 0;
+    for (let i = 0; i < len; i++) {
+      const nx = idx + 1 === N ? 0 : idx + 1, v = ring[idx];
+      ring[idx] = damp * 0.5 * (v + ring[nx]);
+      out[i] = v; idx = nx;
+    }
+    const fade = Math.floor(sr * 0.12);
+    for (let i = 0; i < fade; i++) out[len - 1 - i] *= i / fade;
+    cache.set(key, buf);
+    return buf;
+  }
+  function pluck(midi, o = {}) {
+    if (!ctx) return;
+    const t = o.when || ctx.currentTime;
+    const src = ctx.createBufferSource(); src.buffer = ks(midi, o.damp || 0.996);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = o.bright || 4200;
+    const g = ctx.createGain(); g.gain.value = o.gain == null ? 0.55 : o.gain;
+    let node = src.connect(lp).connect(g);
+    if (ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = o.pan || 0; node = node.connect(p); }
+    node.connect(o.bus || sfxBus);
+    src.start(t);
+  }
+  function tone(f, o = {}) {
+    if (!ctx) return;
+    const t = o.when || ctx.currentTime, d = o.dur || 0.15;
+    const osc = ctx.createOscillator(); osc.type = o.type || 'sine'; osc.frequency.setValueAtTime(f, t);
+    if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t + d);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(o.gain || 0.1, t + (o.attack || 0.005));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    osc.connect(g).connect(o.bus || sfxBus); osc.start(t); osc.stop(t + d + 0.05);
+  }
+  function hiss(o = {}) {
+    if (!ctx) return;
+    const t = o.when || ctx.currentTime, d = o.dur || 0.05;
+    const src = ctx.createBufferSource(); src.buffer = noise;
+    const f = ctx.createBiquadFilter(); f.type = o.type || 'highpass'; f.frequency.value = o.freq || 7000; f.Q.value = o.q || 0.7;
+    const g = ctx.createGain(); g.gain.setValueAtTime(o.gain || 0.1, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    src.connect(f).connect(g).connect(o.bus || sfxBus); src.start(t, Math.random() * 0.5); src.stop(t + d + 0.02);
+  }
+  const now = () => (ctx ? ctx.currentTime : 0);
+
+  const sfx = {
+    note(midi, s) { pluck(midi, { pan: s == null ? 0 : (s - 2.5) * 0.12 }); },
+    correct(midi, s) { pluck(midi, { pan: s == null ? 0 : (s - 2.5) * 0.12 }); tone(freq(midi + 24), { gain: 0.05, dur: 0.25, when: now() + 0.03 }); },
+    wrong() { pluck(40, { damp: 0.82, gain: 0.7, bright: 900 }); tone(140, { to: 70, gain: 0.18, dur: 0.22 }); },
+    strum(midis, gap = 0.028, gain = 0.4, at = 0) { midis.forEach((m, i) => pluck(m, { when: now() + at + i * gap, gain, pan: (i - 2.5) * 0.1 })); },
+    combo(step) { const base = [64, 67, 69, 71, 74, 76, 79, 81][Math.min(7, step)]; [0, 3, 7].forEach((x, i) => pluck(base + [0, 3, 5][i] + (x ? 0 : 0), { when: now() + i * 0.06, gain: 0.25 })); },
+    levelUp() { sfx.strum([43, 47, 50, 55, 59, 67], 0.03, 0.45); [71, 74, 79, 83].forEach((m, i) => pluck(m, { when: now() + 0.35 + i * 0.09, gain: 0.3 })); },
+    star(i) { pluck([64, 68, 71][i] + 12, { gain: 0.4 }); tone(freq([64, 68, 71][i] + 36), { gain: 0.04, dur: 0.4 }); },
+    bossHit(crit) { tone(crit ? 110 : 90, { to: 40, gain: 0.5, dur: 0.18 }); hiss({ type: 'lowpass', freq: 1800, gain: 0.25, dur: 0.12 }); },
+    hurt() { tone(70, { to: 40, gain: 0.45, dur: 0.35 }); pluck(41, { damp: 0.9, gain: 0.5, bright: 700 }); },
+    bossDown() { [0, 0.18, 0.36].forEach((d, k) => sfx.strum([40 + k * 2, 47 + k * 2, 52 + k * 2], 0.012, 0.5, d)); },
+    stick(accent) { hiss({ type: 'bandpass', freq: accent ? 2400 : 1800, q: 4, gain: accent ? 0.5 : 0.35, dur: 0.04 }); },
+    click() { pluck(76, { gain: 0.08, damp: 0.95 }); },
+    unlock() { [67, 71, 74, 79].forEach((m, i) => pluck(m, { when: now() + i * 0.07, gain: 0.3 })); },
+  };
+
+  // ---- The band ----
+  const Music = (() => {
+    let on = false, bpm = 100, prog = [], step = 0, next = 0, timer = null, intensity = 0, onBeat = null;
+    const tones = q => (q === 'm' ? [0, 3, 7] : q === '5' ? [0, 7, 12] : [0, 4, 7]);
+    function start(cfg, beatCb) {
+      if (!ctx || !opts.music) return;
+      stop(); on = true; bpm = cfg.bpm; prog = cfg.prog; step = 0; next = ctx.currentTime + 0.08; onBeat = beatCb;
+      timer = setInterval(tick, 25);
+    }
+    function stop() { on = false; if (timer) clearInterval(timer); timer = null; }
+    function setIntensity(i) { intensity = i; }
+    function tick() {
+      if (!on) return;
+      while (next < ctx.currentTime + 0.12) { play(step, next); next += 60 / bpm / 4; step++; }
+    }
+    function pad(root, q, t, dur) {
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500 + intensity * 260;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.045, t + 0.6); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      lp.connect(g).connect(musicBus);
+      tones(q).concat([12]).forEach((x, i) => {
+        const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = freq(root + 12 + x); o.detune.value = (i % 2 ? 7 : -7);
+        o.connect(lp); o.start(t); o.stop(t + dur + 0.1);
+      });
+    }
+    function play(st, t) {
+      const s16 = st % 16, bar = Math.floor(st / 16) % prog.length, [root, q] = prog[bar], I = intensity;
+      const spb = 60 / bpm;
+      if (s16 === 0) pad(root, q, t, spb * 4);
+      if (I >= 1 && (s16 === 0 || s16 === 8 || (I >= 4 && s16 === 6))) tone(150, { to: 42, gain: 0.55, dur: 0.16, when: t, bus: musicBus });
+      if (I >= 1 && s16 % 2 === 0) hiss({ when: t, gain: s16 % 4 === 2 ? 0.07 : 0.035, dur: 0.035, bus: musicBus });
+      if (I >= 4 && s16 % 2 === 1) hiss({ when: t, gain: 0.025, dur: 0.02, bus: musicBus });
+      if (I >= 3 && (s16 === 4 || s16 === 12)) { hiss({ when: t, type: 'bandpass', freq: 1900, q: 0.8, gain: 0.22, dur: 0.14, bus: musicBus }); tone(190, { when: t, gain: 0.08, dur: 0.08, type: 'triangle', bus: musicBus }); }
+      if (I >= 2 && [0, 3, 6, 8, 11, 14].includes(s16)) pluck(root + (s16 === 11 ? 12 : 0), { when: t, gain: 0.42, bright: 1400, bus: musicBus });
+      if (I >= 3) {
+        const tt = tones(q), arp = [tt[0] + 24, tt[1] + 24, tt[2] + 24, tt[0] + 36];
+        pluck(root + arp[s16 % 4], { when: t, gain: 0.07, pan: s16 % 2 ? 0.4 : -0.4, bus: musicBus });
+      }
+      if (s16 % 4 === 0 && onBeat) {
+        const ms = Math.max(0, (t - ctx.currentTime) * 1000), b = s16 / 4;
+        setTimeout(() => on && onBeat(b, I), ms);
+      }
+    }
+    return { start, stop, setIntensity, get on() { return on; } };
+  })();
+
+  return { init, set, pluck, sfx, Music, opts, now, get ready() { return !!ctx; } };
+})();
+// ===== Fretboard drawing (SVG), particles, and the world backgrounds =====
+const NS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+class Fretboard {
+  // svg: the <svg>; o: { view, skin, labels, nums, lefty, onCell }
+  constructor(svg) { this.svg = svg; this.vib = new Map(); this.raf = null; }
+  draw(o) {
+    this.o = o;
+    // Phones get a taller board (bigger string spacing and text) so every spot stays tappable
+    // (a sideways phone gets a medium board so the answer buttons still fit beside it)
+    const narrow = (this.svg.getBoundingClientRect().width || innerWidth) < 640;
+    const short = innerHeight < 520 && innerWidth > innerHeight;
+    const sz = narrow ? (short ? 1 : 2) : 0;
+    const k = this.k = [1, 1.3, 1.9][sz];
+    const svg = this.svg, W = 1000, H = [260, 300, 430][sz], skin = o.skin;
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.innerHTML = '';
+    const top = [26, 32, 44][sz], bot = H - [46, 50, 62][sz], openW = [74, 88, 104][sz], x0 = openW, x1 = W - 8;
+    this.geo = { W, H, top, bot, x0, x1, openW };
+    const F = o.view;
+    // Fret line positions: half real guitar spacing, half even, so high frets stay tappable
+    const real = n => (1 - Math.pow(2, -n / 12)) / (1 - Math.pow(2, -F / 12));
+    this.fx = [];
+    for (let n = 0; n <= F; n++) this.fx.push(x0 + (x1 - x0) * (0.5 * real(n) + 0.5 * (n / F)));
+    const X = x => (o.lefty ? W - x : x);
+    this.X = X;
+    const defs = el('defs', {}, svg);
+    const id = 'g' + Math.random().toString(36).slice(2, 7);
+    const lg = el('linearGradient', { id: id + 'w', x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+    el('stop', { offset: 0, 'stop-color': skin.wood[0] }, lg); el('stop', { offset: 1, 'stop-color': skin.wood[1] }, lg);
+    const fg = el('linearGradient', { id: id + 'f', x1: 0, y1: 0, x2: 1, y2: 0 }, defs);
+    el('stop', { offset: 0, 'stop-color': '#6b757a' }, fg); el('stop', { offset: 0.5, 'stop-color': skin.fret }, fg); el('stop', { offset: 1, 'stop-color': '#5c6569' }, fg);
+    const glow = el('filter', { id: id + 'gl', x: '-50%', y: '-50%', width: '200%', height: '200%' }, defs);
+    el('feGaussianBlur', { stdDeviation: 3, result: 'b' }, glow);
+    const m = el('feMerge', {}, glow); el('feMergeNode', { in: 'b' }, m); el('feMergeNode', { in: 'SourceGraphic' }, m);
+    if (skin.abalone) {
+      const ab = el('linearGradient', { id: id + 'ab', x1: 0, y1: 0, x2: 1, y2: 1 }, defs);
+      ['#7fe8d8', '#7f8cff', '#e27fff', '#7fffb0'].forEach((c, i) => el('stop', { offset: i / 3, 'stop-color': c }, ab));
+    }
+    this.glowId = id + 'gl';
+    // Wood
+    const bx = Math.min(X(x0 - 6), X(x1)), bw = x1 - x0 + 6;
+    el('rect', { x: bx, y: top - 16, width: bw, height: bot - top + 32, rx: 4, fill: `url(#${id}w)` }, svg);
+    const grain = el('g', { opacity: skin.cracks ? 0.55 : skin.stars ? 0.9 : 0.35 }, svg);
+    let seed = 7; const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+    if (skin.stars) {
+      for (let i = 0; i < 90; i++) el('circle', { cx: bx + rnd() * bw, cy: top - 14 + rnd() * (bot - top + 28), r: rnd() * 1.4 + 0.2, fill: skin.grain, opacity: rnd() }, grain);
+    } else {
+      for (let i = 0; i < 26; i++) {
+        const y = top - 14 + rnd() * (bot - top + 28), wob = rnd() * 6 - 3;
+        el('path', { d: `M${bx} ${y} C ${bx + bw * 0.3} ${y + wob}, ${bx + bw * 0.6} ${y - wob}, ${bx + bw} ${y + wob * 0.5}`,
+          stroke: skin.grain, 'stroke-width': skin.cracks ? rnd() * 1.6 + 0.4 : rnd() * 2 + 0.5, fill: 'none', filter: skin.cracks ? `url(#${this.glowId})` : null }, grain);
+      }
+    }
+    // Open-string zone
+    el('rect', { x: Math.min(X(0), X(x0 - 8)), y: top - 16, width: x0 - 8, height: bot - top + 32, rx: 8, fill: '#00000055' }, svg);
+    // Inlays
+    const inlayFill = skin.abalone ? `url(#${id}ab)` : skin.inlay;
+    const mid = (top + bot) / 2, gap = (bot - top) / 5;
+    [3, 5, 7, 9, 15].forEach(n => { if (n <= F) el('circle', { cx: X(this.cellX(n)), cy: mid, r: 9 * this.k, fill: inlayFill, opacity: 0.9, filter: skin.glow ? `url(#${this.glowId})` : null }, svg); });
+    if (F >= 12) [mid - gap, mid + gap].forEach(y => el('circle', { cx: X(this.cellX(12)), cy: y, r: 9 * this.k, fill: inlayFill, opacity: 0.9, filter: skin.glow ? `url(#${this.glowId})` : null }, svg));
+    // Frets and nut
+    for (let n = 1; n <= F; n++) el('rect', { x: X(this.fx[n]) - 2.5, y: top - 16, width: 5, height: bot - top + 32, fill: `url(#${id}f)`, rx: 2 }, svg);
+    el('rect', { x: X(x0) - (o.lefty ? 0 : 9), y: top - 18, width: 9, height: bot - top + 36, fill: skin.nut, rx: 2 }, svg);
+    // Fret numbers
+    if (o.nums) for (let n = 1; n <= F; n++) {
+      const t = el('text', { x: X(this.cellX(n)), y: H - 6, 'text-anchor': 'middle', fill: '#ffffff', opacity: [3,5,7,9,12,15].includes(n) ? 0.85 : 0.45, 'font-size': 16 * this.k, 'font-family': 'Chakra Petch, sans-serif', 'font-weight': 700 }, svg);
+      t.textContent = n;
+    }
+    // Strings (index 5 = high E drawn at top)
+    this.strEls = [];
+    const sg = el('g', {}, svg);
+    for (let s = 0; s < 6; s++) {
+      const y = this.sy(s), w = (1.3 + (5 - s) * 0.55) * (this.k > 1 ? 1.5 : 1);
+      const p = el('path', { d: this.strPath(s, 0, 0), stroke: s <= 2 ? skin.wound : skin.str, 'stroke-width': w, fill: 'none', 'stroke-linecap': 'round', filter: skin.glow ? `url(#${this.glowId})` : null }, sg);
+      if (s <= 2) el('path', { d: `M${X(x0)} ${y} L${X(x1)} ${y}`, stroke: '#00000055', 'stroke-width': w * 0.5, 'stroke-dasharray': '1.2 1.8', fill: 'none' }, sg);
+      this.strEls.push(p);
+    }
+    // String labels in the open zone
+    for (let s = 0; s < 6; s++) {
+      const t = el('text', { x: X(11 * this.k), y: this.sy(s) + 5 * this.k, 'text-anchor': 'middle', fill: '#ffffffaa', 'font-size': 14 * this.k, 'font-family': 'Chakra Petch, sans-serif', 'font-weight': 700 }, svg);
+      t.textContent = o.labels === 'names' ? ['E','A','D','G','B','e'][s] : 6 - s;
+    }
+    // Dimming for strings not in play
+    this.dimG = el('g', {}, svg);
+    // Marks + hit cells on top
+    this.markG = el('g', {}, svg);
+    this.cellG = el('g', {}, svg);
+    this.cells = {};
+    for (let s = 0; s < 6; s++) for (let f = 0; f <= F; f++) {
+      const xa = f === 0 ? 0 : this.fx[f - 1], xb = f === 0 ? x0 - 4 : this.fx[f];
+      const r = el('rect', { class: 'cell', x: Math.min(X(xa), X(xb)), y: this.sy(s) - gap / 2, width: Math.abs(xb - xa), height: gap, rx: 6 }, this.cellG);
+      r.addEventListener('pointerdown', e => { e.preventDefault(); o.onCell && o.onCell(s, f, e); });
+      this.cells[s + '-' + f] = r;
+    }
+  }
+  sy(s) { const g = this.geo; return g.top + (5 - s) * (g.bot - g.top) / 5; }
+  cellX(f) { return f === 0 ? this.geo.x0 * 0.6 : this.fx[f] - (this.fx[f] - this.fx[f - 1]) * 0.45; }
+  strPath(s, fromF, off) {
+    const X = this.X, y = this.sy(s), g = this.geo;
+    if (!off) return `M${X(g.x0)} ${y} L${X(g.x1 + 8)} ${y}`;
+    const xs = fromF ? this.fx[fromF] : g.x0, xm = (xs + g.x1) / 2;
+    return `M${X(g.x0)} ${y} L${X(xs)} ${y} Q${X(xm)} ${y + off} ${X(g.x1 + 8)} ${y}`;
+  }
+  setActive(strings) { // dims strings out of play and turns off their cells
+    this.active = strings;
+    this.dimG.innerHTML = '';
+    const g = this.geo, gap = (g.bot - g.top) / 5;
+    for (let s = 0; s < 6; s++) {
+      const on = strings.includes(s);
+      if (!on) el('rect', { x: 0, y: this.sy(s) - gap / 2, width: g.W, height: gap, fill: '#05090c', opacity: 0.55 }, this.dimG);
+      for (const k in this.cells) if (k.startsWith(s + '-')) this.cells[k].classList.toggle('off', !on);
+    }
+  }
+  pos(s, f) { return { x: this.X(this.cellX(f)), y: this.sy(s) }; }
+  screenPos(s, f) { // page pixels for particles
+    const p = this.pos(s, f), m = this.svg.getScreenCTM();
+    if (!m) return { x: innerWidth / 2, y: innerHeight / 2 };
+    const pt = this.svg.createSVGPoint(); pt.x = p.x; pt.y = p.y;
+    const r = pt.matrixTransform(m); return { x: r.x, y: r.y };
+  }
+  clearMarks() { this.markG.innerHTML = ''; }
+  mark(s, f, kind, label) { // kind: target | good | bad | found | ghost | heat
+    const k = this.k, p = this.pos(s, f), g = el('g', { class: 'mk ' + kind }, this.markG);
+    const col = { target: '#ffcb4d', good: '#3ee591', bad: '#ff5b6c', found: '#8ff3f0', ghost: '#ffffff' }[kind] || kind;
+    if (kind === 'target') {
+      const ring = el('circle', { cx: p.x, cy: p.y, r: 16 * k, fill: 'none', stroke: col, 'stroke-width': 3 }, g);
+      el('animate', { attributeName: 'r', values: `${14 * k};${24 * k};${14 * k}`, dur: '1.2s', repeatCount: 'indefinite' }, ring);
+      el('animate', { attributeName: 'opacity', values: '1;0.2;1', dur: '1.2s', repeatCount: 'indefinite' }, ring);
+      el('circle', { cx: p.x, cy: p.y, r: 13 * k, fill: col, filter: `url(#${this.glowId})` }, g);
+      const t = el('text', { x: p.x, y: p.y + 6 * k, 'text-anchor': 'middle', 'font-size': 17 * k, 'font-family': 'Bungee, sans-serif', fill: '#2a1a00' }, g); t.textContent = '?';
+      return g;
+    }
+    const r = (label && label.length > 2 ? 21 : 16) * k;
+    el('circle', { cx: p.x, cy: p.y, r, fill: kind === 'ghost' ? '#ffffff22' : col, stroke: kind === 'ghost' ? '#ffffff88' : '#00000066', 'stroke-width': 2, filter: kind === 'ghost' ? null : `url(#${this.glowId})` }, g);
+    if (label) {
+      const t = el('text', { x: p.x, y: p.y + (label.length > 2 ? 4 : 6) * k, 'text-anchor': 'middle', 'font-size': (label.length > 2 ? 11 : 16) * k, 'font-family': 'Bungee, sans-serif', fill: kind === 'ghost' ? '#ffffff' : '#06140f' }, g);
+      t.textContent = label;
+    }
+    if (kind === 'bad') { el('path', { d: `M${p.x - 7 * k} ${p.y - 7 * k} L${p.x + 7 * k} ${p.y + 7 * k} M${p.x + 7 * k} ${p.y - 7 * k} L${p.x - 7 * k} ${p.y + 7 * k}`, stroke: '#300', 'stroke-width': 3.5, 'stroke-linecap': 'round' }, g); }
+    return g;
+  }
+  heat(s, f, color, glow, label) {
+    const p = this.pos(s, f), g = this.geo, gap = (g.bot - g.top) / 5;
+    const xa = f === 0 ? 0 : this.fx[f - 1], xb = f === 0 ? g.x0 - 4 : this.fx[f];
+    el('rect', { x: Math.min(this.X(xa), this.X(xb)) + 3, y: p.y - gap / 2 + 3, width: Math.abs(xb - xa) - 6, height: gap - 6, rx: 6, fill: color, opacity: 0.78, filter: glow ? `url(#${this.glowId})` : null }, this.markG);
+    if (label) { const t = el('text', { x: p.x, y: p.y + 5 * this.k, 'text-anchor': 'middle', 'font-size': 13 * this.k, 'font-family': 'Bungee, sans-serif', fill: '#06140f' }, this.markG); t.textContent = label; }
+  }
+  vibrate(s, f) { // decaying wobble from the pressed fret to the bridge
+    this.vib.set(s, { f, t0: performance.now() });
+    if (!this.raf) this.raf = requestAnimationFrame(() => this.tick());
+  }
+  tick() {
+    const now = performance.now();
+    for (const [s, v] of this.vib) {
+      const t = (now - v.t0) / 1000, amp = 7 * this.k * Math.exp(-t * 5) * Math.sin(t * 90);
+      if (t > 1) { this.strEls[s].setAttribute('d', this.strPath(s, 0, 0)); this.vib.delete(s); }
+      else this.strEls[s].setAttribute('d', this.strPath(s, v.f, amp));
+    }
+    this.raf = this.vib.size ? requestAnimationFrame(() => this.tick()) : null;
+  }
+}
+
+// ---- Particles and floating words ----
+const FX = (() => {
+  const cv = document.getElementById('fx'), c = cv.getContext('2d');
+  let parts = [], raf = null, reduce = false;
+  function resize() { const d = devicePixelRatio || 1; cv.width = innerWidth * d; cv.height = innerHeight * d; c.setTransform(d, 0, 0, d, 0, 0); }
+  addEventListener('resize', resize); resize();
+  function burst(x, y, color, n = 26, power = 1) {
+    if (reduce) n = Math.min(n, 6);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, v = (2 + Math.random() * 6) * power;
+      parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 2, life: 1, decay: 0.012 + Math.random() * 0.02, r: 1.5 + Math.random() * 3.5, color, g: 0.18 });
+    }
+    parts.push({ ring: true, x, y, r: 8, life: 1, decay: 0.04, color });
+    go();
+  }
+  function confetti(n = 140) {
+    const cols = ['#ffcb4d', '#1fc8cf', '#ff5b6c', '#3ee591', '#a27dff', '#ffffff'];
+    for (let i = 0; i < (reduce ? 20 : n); i++) parts.push({ x: Math.random() * innerWidth, y: -20 - Math.random() * innerHeight * 0.5, vx: Math.random() * 2 - 1, vy: 2 + Math.random() * 3, life: 1, decay: 0.004, r: 3 + Math.random() * 4, color: cols[i % cols.length], g: 0.03, sq: true, rot: Math.random() * 6 });
+    go();
+  }
+  function go() { if (!raf) raf = requestAnimationFrame(loop); }
+  function loop() {
+    c.clearRect(0, 0, innerWidth, innerHeight);
+    parts = parts.filter(p => p.life > 0);
+    for (const p of parts) {
+      p.life -= p.decay;
+      c.globalAlpha = Math.max(0, p.life);
+      if (p.ring) { p.r += 5; c.strokeStyle = p.color; c.lineWidth = 3; c.beginPath(); c.arc(p.x, p.y, p.r, 0, 7); c.stroke(); continue; }
+      p.vy += p.g; p.x += p.vx; p.y += p.vy; p.vx *= 0.985;
+      c.fillStyle = p.color;
+      if (p.sq) { p.rot += 0.1; c.save(); c.translate(p.x, p.y); c.rotate(p.rot); c.fillRect(-p.r, -p.r / 2, p.r * 2, p.r); c.restore(); }
+      else { c.beginPath(); c.arc(p.x, p.y, p.r, 0, 7); c.fill(); }
+    }
+    c.globalAlpha = 1;
+    raf = parts.length ? requestAnimationFrame(loop) : (c.clearRect(0, 0, innerWidth, innerHeight), null);
+  }
+  function float(text, x, y, cls = '') {
+    const d = document.createElement('div'); d.className = 'floater ' + cls; d.textContent = text;
+    d.style.left = x + 'px'; d.style.top = y + 'px'; document.body.appendChild(d);
+    setTimeout(() => d.remove(), 1100);
+  }
+  function flash(color) { const f = document.getElementById('flash'); f.style.background = `radial-gradient(circle, transparent 40%, ${color})`; f.style.transition = 'none'; f.style.opacity = 0.55; requestAnimationFrame(() => { f.style.transition = 'opacity .45s'; f.style.opacity = 0; }); }
+  function shake() { if (reduce) return; const a = document.getElementById('app'); a.classList.remove('shake'); void a.offsetWidth; a.classList.add('shake'); }
+  return { burst, confetti, float, flash, shake, set reduce(v) { reduce = v; } };
+})();
+
+// ---- World backgrounds that react to your combo and the beat ----
+const BG = (() => {
+  const cv = document.getElementById('bg'), c = cv.getContext('2d');
+  let W = 0, H = 0, world = WORLDS[3], items = [], energy = 0, target = 0, pulse = 0, t = 0, reduce = false;
+  function resize() { const d = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; cv.width = W * d; cv.height = H * d; c.setTransform(d, 0, 0, d, 0, 0); seed(); }
+  function seed() {
+    items = [];
+    const n = Math.round((W * H) / 9000);
+    for (let i = 0; i < n; i++) items.push({ x: Math.random() * W, y: Math.random() * H, z: Math.random(), r: Math.random(), k: Math.random() * 6.28 });
+  }
+  function setWorld(w) { world = w; seed(); }
+  function setEnergy(e) { target = e; }
+  function beat() { pulse = 1; }
+  const A = () => world.accent[0];
+  const draw = {
+    motes(it) { const sp = 0.15 + energy * 0.8; it.y -= sp * (0.3 + it.z); it.x += Math.sin(t * 0.6 + it.k) * 0.3; if (it.y < -5) it.y = H + 5; c.fillStyle = '#ffe2b0'; c.globalAlpha = 0.15 + it.z * 0.35; c.beginPath(); c.arc(it.x, it.y, 0.6 + it.z * 1.6, 0, 7); c.fill(); },
+    bokeh(it, i) { if (i % 4) return; const r = 18 + it.r * 50; c.fillStyle = i % 8 ? A() : world.accent[1]; c.globalAlpha = (0.05 + 0.06 * Math.sin(t + it.k)) * (1 + energy + pulse * 0.6); c.beginPath(); c.arc(it.x + Math.sin(t * 0.2 + it.k) * 20, it.y, r, 0, 7); c.fill(); },
+    sparks(it) { it.y -= (0.6 + energy * 3) * (0.5 + it.z); it.x += Math.sin(t * 2 + it.k) * 0.6; if (it.y < -5) { it.y = H + 5; it.x = Math.random() * W; } c.fillStyle = it.k > 3 ? A() : '#ffd27a'; c.globalAlpha = 0.25 + it.z * 0.6; c.fillRect(it.x, it.y, 1.5 + it.z * 1.5, 3 + energy * 8); },
+    bubbles(it) { it.y -= (0.3 + energy * 1.8) * (0.4 + it.z); it.x += Math.sin(t + it.k) * 0.4; if (it.y < -10) { it.y = H + 10; } c.strokeStyle = world.accent[1]; c.globalAlpha = 0.12 + it.z * 0.3; c.lineWidth = 1; c.beginPath(); c.arc(it.x, it.y, 1 + it.z * 5, 0, 7); c.stroke(); },
+    stars(it) { const sp = 0.002 + energy * 0.03; it.z -= sp; if (it.z <= 0.01) { it.z = 1; it.x = Math.random() * W; it.y = Math.random() * H; } const cx = W / 2, cy = H / 2, k = 0.12 / it.z; const x = cx + (it.x - cx) * k, y = cy + (it.y - cy) * k; if (x < 0 || x > W || y < 0 || y > H) { it.z = 1; return; } const len = energy * 14 * (1 - it.z) + 0.5; c.strokeStyle = '#ffffff'; c.globalAlpha = Math.min(1, (1 - it.z) * 1.4); c.lineWidth = 1 + (1 - it.z) * 1.5; c.beginPath(); c.moveTo(x, y); c.lineTo(x + (x - cx) * len * 0.01, y + (y - cy) * len * 0.01); c.stroke(); },
+    crowd(it, i) { if (i % 2) return; const x = it.x, y = H - 6 - it.r * 40 + Math.sin(t * 6 * (0.5 + energy) + it.k) * (2 + energy * 6); c.fillStyle = it.k > 3 ? '#fff6c8' : A(); c.globalAlpha = 0.25 + 0.5 * it.z * (0.4 + energy); c.beginPath(); c.arc(x, y, 1.4, 0, 7); c.fill(); },
+  };
+  const overlay = {
+    eq() { const n = 32, bw = W / n; for (let i = 0; i < n; i++) { const h = (0.15 + 0.85 * Math.abs(Math.sin(t * (2 + energy * 3) + i * 0.7) * Math.sin(t * 1.3 + i))) * (40 + energy * 140 + pulse * 60); c.fillStyle = A(); c.globalAlpha = 0.12 + energy * 0.15; c.fillRect(i * bw + 2, H - h, bw - 4, h); } },
+    rays() { for (let i = 0; i < 5; i++) { const x = W * (0.15 + i * 0.18) + Math.sin(t * 0.3 + i) * 60; const g = c.createLinearGradient(x, 0, x + 80, H); g.addColorStop(0, world.accent[1]); g.addColorStop(1, 'transparent'); c.fillStyle = g; c.globalAlpha = 0.05 + energy * 0.05; c.beginPath(); c.moveTo(x - 30, 0); c.lineTo(x + 30, 0); c.lineTo(x + 200, H); c.lineTo(x - 40, H); c.fill(); } },
+    aurora() { for (let k = 0; k < 3; k++) { c.beginPath(); c.moveTo(0, H * 0.3); for (let x = 0; x <= W; x += 20) c.lineTo(x, H * (0.25 + k * 0.08) + Math.sin(x * 0.006 + t * (0.4 + energy) + k * 2) * 40); c.lineTo(W, 0); c.lineTo(0, 0); c.fillStyle = k === 1 ? A() : world.accent[1]; c.globalAlpha = 0.06 + energy * 0.05; c.fill(); } },
+    beams() { for (let i = 0; i < 4; i++) { const base = W * (0.12 + i * 0.25), ang = Math.sin(t * (0.5 + energy * 1.2) + i * 1.7) * 0.6; c.save(); c.translate(base, H + 10); c.rotate(ang); const g = c.createLinearGradient(0, 0, 0, -H); g.addColorStop(0, i % 2 ? A() : world.accent[1]); g.addColorStop(1, 'transparent'); c.fillStyle = g; c.globalAlpha = 0.08 + energy * 0.12 + pulse * 0.08; c.beginPath(); c.moveTo(-8, 0); c.lineTo(8, 0); c.lineTo(90, -H * 1.2); c.lineTo(-90, -H * 1.2); c.fill(); c.restore(); } },
+  };
+  function frame() {
+    t += 0.016; energy += (target - energy) * 0.04; pulse *= 0.9;
+    const g = c.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, world.bg[0]); g.addColorStop(1, world.bg[1]);
+    c.globalAlpha = 1; c.fillStyle = g; c.fillRect(0, 0, W, H);
+    if (pulse > 0.02) { c.fillStyle = A(); c.globalAlpha = pulse * 0.06 * (0.5 + energy); c.fillRect(0, 0, W, H); }
+    const kinds = world.fx;
+    for (const k of kinds) if (overlay[k]) overlay[k]();
+    for (const k of kinds) if (draw[k]) items.forEach((it, i) => draw[k](it, i));
+    // vignette
+    const v = c.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75);
+    v.addColorStop(0, 'transparent'); v.addColorStop(1, '#000000');
+    c.globalAlpha = 0.65; c.fillStyle = v; c.fillRect(0, 0, W, H); c.globalAlpha = 1;
+    if (!reduce) requestAnimationFrame(frame);
+  }
+  addEventListener('resize', resize); resize(); requestAnimationFrame(frame);
+  return { setWorld, setEnergy, beat, set reduce(v) { const was = reduce; reduce = v; if (was && !v) requestAnimationFrame(frame); else if (v) requestAnimationFrame(frame); } };
+})();
+
+// ---- Procedural boss monsters ----
+function bossSVG(look, angry) {
+  const h = look.hue, body = `hsl(${h} 70% ${angry ? 38 : 45}%)`, dark = `hsl(${h} 70% 22%)`, lite = `hsl(${h} 80% 70%)`;
+  let s = `<svg viewBox="0 0 100 100" xmlns="${NS}">`;
+  if (look.tentacles) for (let i = 0; i < 6; i++) s += `<path d="M${22 + i * 11} 70 q ${i % 2 ? 8 : -8} 14 ${i % 2 ? -2 : 2} 26" stroke="${dark}" stroke-width="7" fill="none" stroke-linecap="round"/>`;
+  if (look.horns) s += `<path d="M24 34 L12 6 L36 26 Z" fill="${lite}"/><path d="M76 34 L88 6 L64 26 Z" fill="${lite}"/>`;
+  s += `<path d="M50 14 C 80 14 92 38 90 58 C 88 80 70 90 50 90 C 30 90 12 80 10 58 C 8 38 20 14 50 14 Z" fill="${body}" stroke="${dark}" stroke-width="3"/>`;
+  s += `<ellipse cx="38" cy="30" rx="14" ry="7" fill="#ffffff" opacity=".18"/>`;
+  if (look.crown) s += `<path d="M30 18 L34 4 L42 14 L50 2 L58 14 L66 4 L70 18 Z" fill="#ffcb4d" stroke="#8a6500" stroke-width="2"/>`;
+  const n = look.eyes, pupil = angry ? '#ff2a2a' : '#111';
+  for (let i = 0; i < n; i++) {
+    const x = n === 1 ? 50 : 28 + (44 / (n - 1)) * i, y = n > 3 ? 44 + (i % 2) * 8 : 46, r = n === 1 ? 13 : n > 3 ? 6.5 : 9;
+    s += `<circle cx="${x}" cy="${y}" r="${r}" fill="#fff"/><circle cx="${x + 1}" cy="${y + 1}" r="${r * 0.48}" fill="${pupil}"><animate attributeName="r" values="${r * 0.48};${r * 0.48};0.5;${r * 0.48}" keyTimes="0;0.9;0.95;1" dur="${3 + i * 0.4}s" repeatCount="indefinite"/></circle>`;
+    if (angry) s += `<path d="M${x - r} ${y - r - 2} L${x + r} ${y - r + 4}" stroke="${dark}" stroke-width="3"/>`;
+  }
+  s += `<path d="M30 68 Q50 ${angry ? 60 : 80} 70 68" stroke="${dark}" stroke-width="4" fill="${angry ? '#3a0000' : 'none'}" stroke-linecap="round"/>`;
+  if (look.fangs) s += `<path d="M38 69 l3 8 l3 -7 Z M56 69 l3 7 l3 -8 Z" fill="#fff"/>`;
+  return s + '</svg>';
+}
+// ===== Save data, progress, and the play loop =====
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const rand = a => a[Math.floor(Math.random() * a.length)];
+const SAVE_KEY = 'fretstorm.v1';
+function today(d = new Date()) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+const freshSave = () => ({ v: 1, name: '', xp: 0, lvl: 1, stars: {}, best: {}, mastery: {},
+  tot: { ans: 0, ok: 0, accOk: 0, bestCombo: 0 }, ach: {}, skin: 'rosewood', streak: { last: '', count: 0 },
+  rushBest: 0, rushNotes: 0, lessons: {}, unlockAll: false, unlockAllUsed: false, created: today(),
+  set: { sfx: true, music: true, vol: 0.8, lefty: false, nums: false, naming: 'both', reduce: false } });
+function merge(a, b) {
+  for (const k in b) {
+    if (b[k] && typeof b[k] === 'object' && !Array.isArray(b[k]) && a[k] && typeof a[k] === 'object') a[k] = merge(a[k], b[k]);
+    else a[k] = b[k];
+  }
+  return a;
+}
+function loadSave() { try { const raw = localStorage.getItem(SAVE_KEY); if (raw) return merge(freshSave(), JSON.parse(raw)); } catch (e) {} return freshSave(); }
+let S = loadSave();
+function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {} }
+
+// ---- Progress helpers ----
+const SEQ = []; WORLDS.forEach(w => { LEVELS.filter(l => l.world === w.n).forEach(l => SEQ.push(l.id)); SEQ.push('B' + w.n); });
+function worldSeq(w) { return SEQ.filter(id => (id[0] === 'B' ? +id.slice(1) : +id[0]) === w); }
+function isWorldOpen(w) { return S.unlockAll || w === 1 || (S.stars['B' + (w - 1)] || 0) > 0; }
+function isOpen(id) {
+  if (S.unlockAll) return true;
+  const w = id[0] === 'B' ? +id.slice(1) : +id[0], seq = worldSeq(w), i = seq.indexOf(id);
+  return i === 0 ? isWorldOpen(w) : (S.stars[seq[i - 1]] || 0) > 0;
+}
+const totalStars = () => Object.values(S.stars).reduce((a, b) => a + b, 0);
+const highestWorld = () => WORLDS.filter(w => isWorldOpen(w.n)).pop();
+function positions(lv) {
+  const out = [];
+  for (const s of lv.strings) for (let f = lv.frets[0]; f <= lv.frets[1]; f++) {
+    const pc = pcOf(s, f);
+    if (lv.acc || isNat(pc)) out.push({ s, f, pc });
+  }
+  return out;
+}
+function clearedPool() {
+  const seen = new Map();
+  LEVELS.filter(l => S.stars[l.id] > 0).forEach(l => positions(l).forEach(p => seen.set(p.s + '-' + p.f, p)));
+  return [...seen.values()];
+}
+function learn(s, f, ok, ms) {
+  const k = s + '-' + f, m = S.mastery[k] || (S.mastery[k] = { a: 0, c: 0, t: 0, m: 0 });
+  m.a++; if (ok) m.c++;
+  m.t = m.t ? Math.round(m.t * 0.7 + ms * 0.3) : Math.round(ms);
+  const sc = ok ? (ms < 2500 ? 1 : 0.75) : 0;
+  m.m = m.a === 1 ? sc * 0.6 : m.m * 0.7 + sc * 0.3;
+}
+function masteryBand(m) {
+  if (!m || !m.a) return 0;
+  if (m.m >= 0.9 && m.a >= 4) return 4;
+  return m.m >= 0.7 ? 3 : m.m >= 0.4 ? 2 : 1;
+}
+const masteredCount = () => Object.values(S.mastery).filter(m => masteryBand(m) === 4).length;
+function touchStreak() {
+  const t = today(); if (S.streak.last === t) return;
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  S.streak.count = S.streak.last === today(y) ? S.streak.count + 1 : 1;
+  S.streak.last = t;
+}
+function addXp(x) {
+  S.xp += x; const ups = [];
+  while (S.xp >= xpNeed(S.lvl)) { S.xp -= xpNeed(S.lvl); S.lvl++; ups.push(S.lvl); }
+  return ups;
+}
+function grant(id) {
+  if (S.ach[id]) return;
+  S.ach[id] = today();
+  const a = ACHIEVEMENTS.find(x => x.id === id);
+  if (a) { toast(a.icon, a.name, a.desc); Sound.sfx.unlock(); }
+}
+function checkAch() {
+  const t = S.tot;
+  if (t.ok >= 1) grant('first');
+  const bc = Math.max(t.bestCombo, run ? run.maxCombo : 0);
+  if (bc >= 10) grant('combo10'); if (bc >= 25) grant('combo25'); if (bc >= 50) grant('combo50');
+  if (t.ok >= 100) grant('n100'); if (t.ok >= 1000) grant('n1000'); if (t.accOk >= 100) grant('sharp');
+  if (S.streak.count >= 3) grant('streak3'); if (S.streak.count >= 7) grant('streak7');
+  if (totalStars() >= 30) grant('stars30');
+  const bosses = WORLDS.filter(w => S.stars['B' + w.n] > 0).length;
+  if (S.stars.B1) grant('boss1'); if (bosses >= 4) grant('boss4'); if (S.stars.B8) grant('boss8');
+  if (masteredCount() >= 60) grant('master');
+}
+function theme(w, accent) {
+  const r = document.documentElement.style;
+  if (accent) { r.setProperty('--accent', w.accent[0]); r.setProperty('--accent-2', w.accent[1]); r.setProperty('--teal-deep', w.accent[2]); }
+  else ['--accent', '--accent-2', '--teal-deep'].forEach(k => r.removeProperty(k));
+  BG.setWorld(w);
+}
+const skinObj = () => SKINS.find(k => k.id === S.skin && S.lvl >= k.lvl) || SKINS[0];
+
+// ---- Building a level ----
+function viewFor(pool) { const hi = Math.max(...pool.map(p => p.f)); return hi === 0 ? 5 : hi <= 5 ? 7 : hi <= 12 ? 12 : 15; }
+function finalize(lv) {
+  lv.pool = lv.pool || positions(lv);
+  lv.strings = [...new Set(lv.pool.map(p => p.s))].sort();
+  lv.frets = [Math.min(...lv.pool.map(p => p.f)), Math.max(...lv.pool.map(p => p.f))];
+  lv.view = viewFor(lv.pool);
+  return lv;
+}
+function makeLevel(id) {
+  if (id === 'rush') {
+    let pool = clearedPool();
+    if (pool.length < 6) { const m = new Map(); LEVELS.filter(l => isWorldOpen(l.world)).forEach(l => positions(l).forEach(p => m.set(p.s + '-' + p.f, p))); pool = [...m.values()]; }
+    return finalize({ id, name: 'Fret Rush', world: highestWorld().n, modes: ['name', 'find'], pool, rush: true, target: 2.5, acc: pool.some(p => !isNat(p.pc)) });
+  }
+  if (id === 'practice') {
+    let pool = clearedPool(); if (!pool.length) pool = positions(LEVELS[0]);
+    pool = pool.map(p => ({ p, m: S.mastery[p.s + '-' + p.f] })).sort((a, b) => (a.m ? a.m.m : -1) - (b.m ? b.m.m : -1)).slice(0, 14).map(x => x.p);
+    return finalize({ id, name: 'Weak Spot Practice', world: highestWorld().n, modes: pool.every(p => p.f === 0) ? ['name'] : ['name', 'find'], pool, practice: true, n: 15, target: 3, acc: pool.some(p => !isNat(p.pc)) });
+  }
+  if (id[0] === 'B') {
+    const w = +id.slice(1), lvls = LEVELS.filter(l => l.world === w), seen = new Map();
+    lvls.forEach(l => positions(l).forEach(p => seen.set(p.s + '-' + p.f, p)));
+    let modes = [...new Set(lvls.flatMap(l => l.modes))].filter(m => m !== 'hunt');
+    const boss = BOSSES[w];
+    return finalize({ id, name: boss.name, world: w, boss, modes, pool: [...seen.values()], timer: boss.timer, target: lvls[lvls.length - 1].target, acc: lvls.some(l => l.acc) });
+  }
+  const base = LEVELS.find(l => l.id === id);
+  return base ? finalize(Object.assign({}, base)) : null;
+}
+function pick(pool, last) {
+  const ws = pool.map(p => {
+    const m = S.mastery[p.s + '-' + p.f];
+    let w = m ? 1 + 3 * (1 - m.m) : 3;
+    if (run.lv.acc && !isNat(p.pc)) w *= 1.6;
+    if (last && last.s === p.s && last.f === p.f) w = 0.01;
+    else if (last && last.pc === p.pc) w *= 0.35;
+    return w;
+  });
+  let r = Math.random() * ws.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < pool.length; i++) { r -= ws[i]; if (r <= 0) return pool[i]; }
+  return pool[pool.length - 1];
+}
+
+// ---- The play loop ----
+let run = null;
+const board = new Fretboard($('board'));
+const mult = () => (run.combo >= 20 ? 4 : run.combo >= 10 ? 3 : run.combo >= 5 ? 2 : 1);
+const nameFor = pc => noteName(pc, S.set.naming === 'both' ? (Math.random() < 0.5 ? 'sharp' : 'flat') : S.set.naming);
+
+function play(id) {
+  Sound.init();
+  const lv = makeLevel(id); if (!lv) return;
+  touchStreak(); save();
+  document.querySelectorAll('.levelup').forEach(e => e.remove()); closeModal();
+  const world = WORLDS[lv.world - 1];
+  run = { lv, world, idx: 0, ok: 0, bad: 0, combo: 0, maxCombo: 0, score: 0, xp: 0, times: [], missed: [], lock: true,
+    hp: lv.boss ? lv.boss.hp : 0, hearts: lv.boss ? lv.boss.hearts : 0, over: false, angry: false };
+  theme(world, true);
+  show('play');
+  board.draw({ view: lv.view, skin: skinObj(), labels: world.labels, nums: world.nums || S.set.nums, lefty: S.set.lefty, onCell });
+  board.setActive(lv.strings);
+  buildPad(lv.acc);
+  $('pad').hidden = !lv.modes.includes('name');
+  $('play').classList.toggle('nopad', !lv.modes.includes('name'));
+  $('bossBar').hidden = !lv.boss;
+  if (lv.boss) { $('bossName').textContent = lv.boss.name; drawBoss(); }
+  $('timer').style.visibility = lv.timer || lv.rush ? 'visible' : 'hidden';
+  $('timerBar').style.transform = 'scaleX(1)';
+  $('feedback').innerHTML = ''; $('boardWrap').className = 'board-wrap';
+  updateHud();
+  const go = () => countIn(world.music.bpm, begin);
+  if (lv.boss) intro(lv, go);
+  else if (!lv.rush && !lv.practice && !S.lessons[world.n]) { S.lessons[world.n] = 1; save(); showLesson(world, go); }
+  else go();
+}
+function intro(lv, go) {
+  modal(`<div class="boss-art" style="width:140px;height:140px;margin:0 auto">${bossSVG(lv.boss.look)}</div>
+    <div class="eyebrow" style="text-align:center">Boss · World ${lv.world}</div>
+    <h2 style="text-align:center">${lv.boss.name}</h2><p style="text-align:center" class="muted">${lv.boss.line}</p>
+    <p style="text-align:center">Every right answer hits for damage. Answer fast for critical hits. Miss, or run out of time, and you lose a heart.</p>
+    <button class="btn" id="mGo" type="button">Fight</button>`, go);
+}
+function countIn(bpm, done) {
+  const token = run, beat = 60 / bpm * 1000;
+  ['3', '2', '1', 'GO!'].forEach((w, i) => setTimeout(() => {
+    if (run !== token || run.over) return;
+    Sound.sfx.stick(i === 3);
+    $('prompt').innerHTML = `<span class="big-word" style="color:${i === 3 ? 'var(--gold)' : 'var(--text)'}">${w}</span>`;
+    if (i === 3) setTimeout(() => run === token && done(), beat * 0.5);
+  }, i * beat));
+}
+function begin() {
+  Sound.Music.start(run.world.music, () => BG.beat());
+  setIntensity();
+  if (run.lv.rush) { run.rushEnd = performance.now() + 60000; rushLoop(); }
+  next();
+}
+function setIntensity() {
+  const c = run.combo, base = run.lv.boss || run.lv.rush ? 1 : 0;
+  Sound.Music.setIntensity(Math.min(4, base + (c >= 25 ? 4 : c >= 15 ? 3 : c >= 8 ? 2 : c >= 3 ? 1 : 0)));
+  BG.setEnergy(Math.min(1, c / 25 + (base ? 0.15 : 0)));
+  $('boardWrap').className = 'board-wrap' + (c >= 15 ? ' fire' : c >= 5 ? ' glow' : '');
+}
+function next() {
+  if (!run || run.over || run.paused) return;
+  const lv = run.lv;
+  if (lv.rush && performance.now() >= run.rushEnd) return finish();
+  if (!lv.boss && !lv.rush && run.idx >= lv.n) return finish();
+  run.idx++;
+  board.clearMarks(); $('feedback').innerHTML = '';
+  document.querySelectorAll('.key').forEach(k => k.classList.remove('good', 'bad'));
+  const mode = rand(lv.modes), p = pick(lv.pool, run.last);
+  run.last = p;
+  const q = { type: mode, s: p.s, f: p.f, pc: p.pc, t0: performance.now(), name: nameFor(p.pc) };
+  if (mode === 'find' && lv.frets[1] === 0) q.strFind = true;
+  if (mode === 'hunt') { q.targets = lv.pool.filter(x => x.pc === p.pc).map(x => x.s + '-' + x.f); q.found = new Set(); q.tLast = q.t0; q.clean = true; }
+  run.q = q;
+  if (mode === 'name') { board.mark(p.s, p.f, 'target'); board.setActive(lv.strings); }
+  else board.setActive(q.strFind ? ALL : mode === 'find' ? [p.s] : lv.strings);
+  $('pad').style.opacity = mode === 'name' ? 1 : 0.25;
+  $('pad').style.pointerEvents = mode === 'name' ? 'auto' : 'none';
+  renderPrompt();
+  updateHud();
+  startTimer();
+  run.lock = false;
+}
+function renderPrompt() {
+  const q = run.q, P = $('prompt');
+  if (q.type === 'name') P.innerHTML = run.lv.frets[1] === 0 ? 'Which open string is this?' : 'What note is this?';
+  else if (q.strFind) P.innerHTML = q.pc === 4 ? `Tap the <b>${q.s === 0 ? 'low E' : 'high E'}</b> string` : `Tap the open <b>${q.name}</b> string`;
+  else if (q.type === 'find') P.innerHTML = `Find <b>${q.name}</b> on the <span class="str">${stringLabel(q.s)}</span>`;
+  else P.innerHTML = `Find every <b>${q.name}</b> <span class="muted">· ${q.found.size} of ${q.targets.length}</span>`;
+}
+const labelFor = q => (q.type === 'name' ? noteName(q.pc, S.set.naming) : q.name);
+function startTimer() {
+  cancelAnimationFrame(run.tRaf);
+  run.qEnd = 0;
+  const lv = run.lv;
+  if (lv.rush) return;
+  let secs = lv.timer;
+  if (lv.boss && run.angry) secs = Math.max(3, secs - 1);
+  if (!secs) return;
+  run.qTotal = secs * 1000; run.qEnd = performance.now() + run.qTotal;
+  run.tRaf = requestAnimationFrame(timerLoop);
+}
+function timerLoop() {
+  if (!run || run.lock || run.paused || !run.qEnd) return;
+  const left = run.qEnd - performance.now();
+  $('timerBar').style.transform = `scaleX(${clamp(left / run.qTotal, 0, 1)})`;
+  if (left <= 0) return resolve(false, { timeout: true });
+  run.tRaf = requestAnimationFrame(timerLoop);
+}
+function rushLoop() {
+  if (!run || !run.lv.rush || run.over || run.paused) return;
+  const left = run.rushEnd - performance.now();
+  $('timerBar').style.transform = `scaleX(${clamp(left / 60000, 0, 1)})`;
+  $('hudTitle').textContent = `Fret Rush · ${Math.max(0, Math.ceil(left / 1000))}s`;
+  if (left <= 0) { if (!run.lock) finish(); else run.rushDone = true; return; }
+  run.rRaf = requestAnimationFrame(rushLoop);
+}
+
+// Redraw the board when the screen turns or resizes (phones switch between the tall and wide board)
+let resizeTimer;
+addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (!run || $('play').hidden || !board.o) return;
+    board.draw(board.o); board.setActive(board.active || run.lv.strings);
+    const q = run.q;
+    if (q && !run.lock && q.type === 'name') board.mark(q.s, q.f, 'target');
+    if (q && q.type === 'hunt') q.found.forEach(k => { const [s, f] = k.split('-').map(Number); board.mark(s, f, 'found', noteName(q.pc, 'sharp')); });
+  }, 200);
+});
+
+// ---- Input ----
+function onNote(pc, keyEl) {
+  if (!run || run.lock || run.paused || !run.q || run.q.type !== 'name') return;
+  const ok = pc === run.q.pc;
+  if (keyEl) keyEl.classList.add(ok ? 'good' : 'bad');
+  if (!ok) { const right = document.querySelector(`.key[data-pc="${run.q.pc}"]`); if (right) right.classList.add('good'); }
+  resolve(ok, { s: run.q.s, f: run.q.f });
+}
+function onCell(s, f) {
+  if (!run || run.lock || run.paused || !run.q) { if (!run) Sound.sfx.note(midiOf(s, f), s); return; }
+  const q = run.q;
+  if (q.type === 'name') { Sound.sfx.note(midiOf(s, f), s); board.vibrate(s, f); return; }
+  if (q.type === 'hunt') return huntTap(s, f);
+  if (q.strFind) return resolve(s === q.s, { s, f });
+  if (s !== q.s) return;
+  resolve(pcOf(s, f) === q.pc, { s, f });
+}
+
+// ---- Scoring and feedback ----
+function hit(s, f, ms) {
+  run.ok++; run.combo++; run.maxCombo = Math.max(run.maxCombo, run.combo);
+  S.tot.ok++; S.tot.ans++; if (!isNat(pcOf(s, f))) S.tot.accOk++;
+  run.times.push(ms); learn(s, f, true, ms);
+  const speed = clamp(1 - (ms / 1000 - 0.5) / (run.lv.target * 1.6), 0, 1);
+  const pts = Math.round((100 + 100 * speed) * mult() / 5) * 5;
+  run.score += pts; run.xp += Math.round(pts / 10);
+  Sound.sfx.correct(midiOf(s, f), s); board.vibrate(s, f);
+  const sp = board.screenPos(s, f);
+  FX.burst(sp.x, sp.y, run.world.accent[0], 18 + Math.min(40, run.combo * 2), 1 + Math.min(1, run.combo / 20));
+  FX.float('+' + pts, sp.x, sp.y - 24);
+  comboFx();
+  if (run.lv.boss) damage(ms);
+  if (run.ok === 1 && S.tot.ok === 1) grant('first');
+}
+function miss(s, f) {
+  run.bad++; S.tot.ans++;
+  const lost = run.combo; run.combo = 0;
+  Sound.sfx.wrong(); FX.flash('#ff2a4b99');
+  if (lost >= 5) { const sp = board.screenPos(s, f); FX.float('Combo lost', sp.x, sp.y - 30, 'bad'); }
+  setIntensity();
+  if (run.lv.boss) hurt();
+  if (run.lv.rush) { run.rushEnd -= 3000; FX.float('-3s', innerWidth / 2, innerHeight * 0.3, 'bad'); }
+}
+function comboFx() {
+  const c = run.combo, msg = { 5: 'x2 COMBO', 10: 'x3 ON FIRE', 20: 'x4 UNSTOPPABLE', 30: '30 STREAK', 50: 'LEGENDARY', 75: 'GODLIKE', 100: '100!!!' }[c];
+  if (msg) { FX.float(msg, innerWidth / 2, innerHeight * 0.35, 'big'); Sound.sfx.combo([5, 10, 20, 30, 50, 75, 100].indexOf(c)); FX.flash(run.world.accent[0] + '88'); }
+  const cb = $('hudCombo'); cb.classList.add('bump'); setTimeout(() => cb.classList.remove('bump'), 150);
+  setIntensity();
+}
+function resolve(ok, info) {
+  if (run.lock) return;
+  run.lock = true; cancelAnimationFrame(run.tRaf);
+  const q = run.q, ms = performance.now() - q.t0;
+  if (ok) {
+    hit(info.s, info.f, ms);
+    board.clearMarks(); board.mark(info.s, info.f, 'good', labelFor(q));
+  } else {
+    learn(q.s, q.f, false, ms);
+    run.missed.push({ s: q.s, f: q.f, pc: q.pc });
+    miss(q.s, q.f);
+    board.clearMarks();
+    if (q.type === 'find' && !info.timeout) board.mark(info.s, info.f, 'bad', noteName(pcOf(info.s, info.f), 'sharp'));
+    board.mark(q.s, q.f, 'good', labelFor(q));
+    setTimeout(() => Sound.sfx.note(midiOf(q.s, q.f), q.s), 380);
+    showHint(q, info.timeout);
+  }
+  updateHud();
+  if (run.over) return;
+  setTimeout(() => {
+    if (!run || run.over) return;
+    if (run.lv.rush && (run.rushDone || performance.now() >= run.rushEnd)) return finish();
+    next();
+  }, ok ? 480 : 1700);
+}
+function showHint(q, timeout) {
+  const F = $('feedback'), lead = timeout ? 'Time! ' : '';
+  if (run.lv.frets[1] === 0) { F.innerHTML = `${lead}That's the <b>${STRING_NAME[q.s]}</b> string. Low to high: E A D G B E.`; return; }
+  const f = q.f, path = [];
+  if (f <= 6) for (let i = 0; i <= f; i++) path.push(i);
+  else if (f <= 12) for (let i = 12; i >= f; i--) path.push(i);
+  else for (let i = 12; i <= f; i++) path.push(i);
+  const how = f <= 6 ? `Count up from the open ${STRING_NAME[q.s]}:` : f <= 12 ? 'Count down from fret 12:' : 'Count up from fret 12:';
+  F.innerHTML = `<span>${lead}${how}</span>` + path.map((x, i) => `${i ? '<span class="hint-arrow">→</span>' : ''}<span class="hint-chip${i === path.length - 1 ? ' end' : ''}">${noteName(pcOf(q.s, x), 'sharp')}</span>`).join('');
+}
+function huntTap(s, f) {
+  const q = run.q, k = s + '-' + f;
+  if (q.found.has(k) || !run.lv.strings.includes(s)) return;
+  const ms = performance.now() - q.tLast;
+  if (q.targets.includes(k)) {
+    q.found.add(k); q.tLast = performance.now();
+    hit(s, f, ms);
+    board.mark(s, f, 'found', q.name.length > 2 ? noteName(q.pc, 'sharp') : q.name);
+    renderPrompt(); updateHud();
+    if (q.found.size === q.targets.length) {
+      run.lock = true;
+      if (q.clean) grant('hunter');
+      const bonus = 150 * mult(); run.score += bonus; run.xp += 15;
+      FX.float('ALL FOUND +' + bonus, innerWidth / 2, innerHeight * 0.4, 'big'); FX.confetti(40);
+      Sound.sfx.strum(q.targets.map(t => { const [a, b] = t.split('-').map(Number); return midiOf(a, b); }).sort((a, b) => a - b), 0.04, 0.3);
+      updateHud();
+      setTimeout(next, 1100);
+    }
+  } else {
+    q.clean = false; miss(s, f);
+    const g = board.mark(s, f, 'bad', noteName(pcOf(s, f), 'sharp'));
+    setTimeout(() => g.remove(), 700);
+    updateHud();
+  }
+}
+
+// ---- Bosses ----
+function drawBoss() { $('bossArt').innerHTML = bossSVG(run.lv.boss.look, run.angry); $('bossArt').classList.toggle('angry', run.angry); renderHearts(); }
+function renderHearts() { const b = run.lv.boss; $('hearts').innerHTML = Array.from({ length: b.hearts }, (_, i) => `<span class="${i < run.hearts ? '' : 'gone'}">♥</span>`).join(''); }
+function damage(ms) {
+  const fast = ms <= run.lv.target * 1000, dmg = 1 + (fast ? 1 : 0) + (run.combo >= 10 ? 1 : 0);
+  run.hp = Math.max(0, run.hp - dmg);
+  const art = $('bossArt'); art.classList.remove('hit'); void art.offsetWidth; art.classList.add('hit');
+  Sound.sfx.bossHit(fast);
+  const r = art.getBoundingClientRect();
+  FX.float((fast ? 'CRIT ' : '') + '-' + dmg, r.left + r.width / 2, r.top + 10, fast ? 'big' : '');
+  if (!run.angry && run.hp <= run.lv.boss.hp / 2 && run.hp > 0) { run.angry = true; drawBoss(); toast('😡', run.lv.boss.name + ' is furious', 'Less time per note from here on.'); }
+  if (run.hp <= 0) {
+    run.over = true; Sound.Music.stop();
+    setTimeout(() => { Sound.sfx.bossDown(); FX.burst(r.left + r.width / 2, r.top + r.height / 2, '#ffcb4d', 90, 2); FX.confetti(); FX.shake(); }, 250);
+    setTimeout(finish, 2000);
+  }
+}
+function hurt() {
+  run.hearts--; renderHearts(); Sound.sfx.hurt(); FX.shake();
+  if (run.hearts <= 0) { run.over = true; Sound.Music.stop(); setTimeout(finish, 1700); }
+}
+
+// ---- HUD ----
+function updateHud() {
+  const lv = run.lv;
+  if (!lv.rush) $('hudTitle').textContent = lv.boss ? `Boss · ${lv.name}` : lv.practice ? lv.name : `${lv.id} · ${lv.name}`;
+  $('hudScore').textContent = run.score.toLocaleString();
+  const m = mult(), cb = $('hudCombo');
+  cb.textContent = run.combo >= 3 ? `x${m} · ${run.combo}` : `x${m}`;
+  cb.classList.toggle('hot', run.combo >= 10);
+  const prog = lv.boss ? 1 - run.hp / lv.boss.hp : lv.rush ? 0 : (run.idx - (run.lock ? 0 : 1)) / lv.n;
+  $('hudProg').style.width = (lv.rush ? 100 : clamp(prog, 0, 1) * 100) + '%';
+  $('hudProg').parentElement.style.visibility = lv.rush || lv.boss ? 'hidden' : 'visible';
+  if (lv.boss) $('bossHp').style.width = (run.hp / lv.boss.hp * 100) + '%';
+}
+function buildPad(acc) {
+  const P = $('pad'); P.innerHTML = ''; P.classList.toggle('naturals-only', !acc);
+  const nat = [[0, 'C', 1], [2, 'D', 3], [4, 'E', 5], [5, 'F', 7], [7, 'G', 9], [9, 'A', 11], [11, 'B', 13]];
+  const ac = [[1, 2], [3, 4], [6, 8], [8, 10], [10, 12]];
+  ac.forEach(([pc, col]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'key acc'; b.dataset.pc = pc;
+    b.style.gridColumn = `${col} / span 2`;
+    b.innerHTML = S.set.naming === 'sharp' ? SHARP[pc] : S.set.naming === 'flat' ? FLAT[pc] : `${SHARP[pc]}<br>${FLAT[pc]}`;
+    b.setAttribute('aria-label', SHARP[pc] + ' or ' + FLAT[pc]);
+    b.addEventListener('pointerdown', e => { e.preventDefault(); onNote(pc, b); });
+    if (!acc) b.tabIndex = -1;
+    P.appendChild(b);
+  });
+  nat.forEach(([pc, n, col]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'key nat'; b.dataset.pc = pc;
+    b.style.gridColumn = `${col} / span 2`;
+    b.innerHTML = `${n}<kbd>${n}</kbd>`;
+    b.addEventListener('pointerdown', e => { e.preventDefault(); onNote(pc, b); });
+    b.addEventListener('click', e => { if (e.detail === 0) onNote(pc, b); });
+    P.appendChild(b);
+  });
+}
+
+// ---- Pause ----
+function pause() {
+  if (!run || run.over || run.paused) return;
+  run.paused = true; run.pauseAt = performance.now();
+  cancelAnimationFrame(run.tRaf); cancelAnimationFrame(run.rRaf); Sound.Music.stop();
+  modal(`<h2>Paused</h2><p class="muted">${run.lv.boss ? run.lv.name + ' is waiting.' : 'Take a breath. Stretch those fingers.'}</p>
+    <div class="row"><button class="btn" id="mGo" type="button">Resume</button>
+    <button class="btn ghost" id="pRestart" type="button">Restart</button>
+    <button class="btn ghost" id="pQuit" type="button">Quit to map</button></div>`, resume);
+  $('pRestart').onclick = () => { closeModal(); const id = run.lv.id; run.over = true; play(id); };
+  $('pQuit').onclick = () => { closeModal(); quit(); };
+}
+function resume() {
+  if (!run || !run.paused) return;
+  const d = performance.now() - run.pauseAt; run.paused = false;
+  if (run.q) { run.q.t0 += d; if (run.q.tLast) run.q.tLast += d; }
+  if (run.qEnd) run.qEnd += d;
+  if (run.rushEnd) { run.rushEnd += d; rushLoop(); }
+  Sound.Music.start(run.world.music, () => BG.beat()); setIntensity();
+  if (!run.lock && run.q && run.qEnd) run.tRaf = requestAnimationFrame(timerLoop);
+}
+function quit() {
+  if (run) { run.over = true; cancelAnimationFrame(run.tRaf); cancelAnimationFrame(run.rRaf); }
+  Sound.Music.stop(); BG.setEnergy(0); run = null; save(); show('map');
+}
+
+// ---- Finish and results ----
+function finish() {
+  if (!run || run.done) return;
+  run.done = run.over = run.lock = true;
+  cancelAnimationFrame(run.tRaf); cancelAnimationFrame(run.rRaf);
+  Sound.Music.stop(); BG.setEnergy(0);
+  const lv = run.lv, total = run.ok + run.bad, acc = total ? run.ok / total : 0;
+  const avg = run.times.length ? run.times.reduce((a, b) => a + b, 0) / run.times.length / 1000 : 0;
+  let stars = 0, won = true;
+  if (lv.boss) { won = run.hp <= 0; if (won) { const lost = lv.boss.hearts - run.hearts; stars = lost === 0 ? 3 : lost === 1 ? 2 : 1; } }
+  else if (!lv.rush && !lv.practice) stars = acc >= 0.9 && avg <= lv.target ? 3 : acc >= 0.9 ? 2 : acc >= 0.7 ? 1 : 0;
+  const prev = S.stars[lv.id] || 0, firstClear = stars > 0 && !prev;
+  if (!lv.rush && !lv.practice && stars > prev) S.stars[lv.id] = stars;
+  if (!lv.rush && !lv.practice) S.best[lv.id] = Math.max(S.best[lv.id] || 0, run.score);
+  let newBest = false;
+  if (lv.rush) { if (run.score > S.rushBest) { S.rushBest = run.score; newBest = S.rushBest > 0; } S.rushNotes = Math.max(S.rushNotes, run.ok); if (run.ok >= 25) grant('rush25'); }
+  if (stars === 3 && !lv.boss) grant('three');
+  if (!lv.boss && !lv.rush && !lv.practice && run.bad === 0 && run.ok >= 10) grant('flawless');
+  const bonus = stars * 25 + (firstClear ? 50 : 0) + (lv.boss && won ? 100 : 0);
+  run.xp += bonus;
+  S.tot.bestCombo = Math.max(S.tot.bestCombo, run.maxCombo);
+  const ups = addXp(run.xp);
+  checkAch(); save();
+  renderResults({ lv, stars, won, acc, avg, bonus, ups, newBest, firstClear });
+}
+function renderResults(r) {
+  const { lv } = r, R = $('resultsBox');
+  const idx = SEQ.indexOf(lv.id), nextId = idx >= 0 ? SEQ[idx + 1] : null;
+  const canNext = nextId && r.stars > 0 && isOpen(nextId);
+  let head;
+  if (lv.boss) head = r.won ? `<div class="big-word" style="color:var(--gold)">Boss defeated</div>` : `<div class="big-word" style="color:var(--bad)">${lv.name} wins</div><p class="muted">This round. Bosses get easier every time you practice the world's levels.</p>`;
+  else if (lv.rush) head = `<div class="big-word">Time!</div>${r.newBest ? '<p class="rank">New personal best</p>' : `<p class="muted">Best: ${S.rushBest.toLocaleString()}</p>`}`;
+  else if (lv.practice) head = `<div class="big-word">Practice done</div>`;
+  else head = r.stars ? `<div class="big-word">${run.bad === 0 ? 'Flawless' : r.stars === 3 ? 'Superb' : 'Cleared'}</div>` : `<div class="big-word" style="color:var(--bad)">So close</div><p class="muted">Get 70% right to clear this level.</p>`;
+  const rule = lv.boss ? 'Stars: lose no hearts for ★★★, one heart for ★★.' : `★ 70% right · ★★ 90% · ★★★ 90% and under ${lv.target}s per note`;
+  const miss = []; const seen = new Set();
+  run.missed.forEach(m => { const k = m.s + '-' + m.f; if (!seen.has(k)) { seen.add(k); miss.push(m); } });
+  R.innerHTML = `
+    <div class="eyebrow">${lv.boss ? 'Boss · World ' + lv.world : lv.rush ? 'Fret Rush' : lv.practice ? 'Practice' : 'Level ' + lv.id + ' · ' + lv.name}</div>
+    ${head}
+    ${lv.rush || lv.practice ? '' : `<div class="stars">${[0, 1, 2].map(i => `<span class="star" id="st${i}">★</span>`).join('')}</div><p class="muted" style="font-size:13px">${rule}</p>`}
+    <div class="stats">
+      <div class="stat"><b>${run.score.toLocaleString()}</b><span>Score</span></div>
+      <div class="stat"><b>${Math.round(r.acc * 100)}%</b><span>Correct</span></div>
+      <div class="stat"><b>${r.avg ? r.avg.toFixed(1) + 's' : '–'}</b><span>Avg per note</span></div>
+      <div class="stat"><b>${run.maxCombo}</b><span>Best combo</span></div>
+    </div>
+    <div style="width:100%"><div class="row" style="justify-content:space-between"><span class="rank">+${run.xp} XP</span><span class="muted">Level ${S.lvl} · ${rankFor(S.lvl)}</span></div>
+      <div class="xpbar" style="width:100%;margin-top:6px"><i id="resXp"></i></div></div>
+    ${miss.length ? `<div class="card review"><h3>Notes to review</h3><ul>${miss.slice(0, 8).map(m => `<li><b>${noteName(m.pc, 'both')}</b> on the ${STRING_NAME[m.s]} string is fret ${m.f}${m.f === 0 ? ' (open)' : ''}</li>`).join('')}</ul></div>` : ''}
+    <div class="row" style="justify-content:center">
+      ${canNext ? `<button class="btn" id="rNext" type="button">Next: ${nextId[0] === 'B' ? 'Boss fight' : nextId}</button>` : ''}
+      <button class="btn ${canNext ? 'ghost' : ''}" id="rRetry" type="button">${lv.rush || lv.practice ? 'Play again' : 'Retry'}</button>
+      <button class="btn ghost" id="rMap" type="button">${lv.rush || lv.practice ? 'Menu' : 'Map'}</button>
+    </div>`;
+  show('results');
+  theme(run.world, true);
+  if (canNext) $('rNext').onclick = () => play(nextId);
+  $('rRetry').onclick = () => play(lv.id);
+  $('rMap').onclick = () => { run = null; show(lv.rush || lv.practice ? 'title' : 'map'); };
+  setTimeout(() => { const x = $('resXp'); if (x) x.style.width = (S.xp / xpNeed(S.lvl) * 100) + '%'; }, 200);
+  for (let i = 0; i < r.stars; i++) setTimeout(() => { const s = $('st' + i); if (s) { s.classList.add('on'); Sound.sfx.star(i); const b = s.getBoundingClientRect(); FX.burst(b.left + b.width / 2, b.top + b.height / 2, '#ffcb4d', 30); } }, 500 + i * 420);
+  if (r.stars === 3 || (lv.boss && r.won)) setTimeout(() => FX.confetti(), 500 + 3 * 420);
+  if (r.ups.length) setTimeout(() => levelUp(r.ups[r.ups.length - 1], r.ups), 900 + r.stars * 420);
+}
+function levelUp(lvl, ups) {
+  const skins = SKINS.filter(k => ups.includes(k.lvl));
+  const ranks = RANKS.filter(k => ups.includes(k[0]) && k[0] > 1);
+  Sound.sfx.levelUp(); FX.confetti(160);
+  const d = document.createElement('div'); d.className = 'levelup';
+  d.innerHTML = `<div class="eyebrow">Level up</div><div class="big-word">LEVEL ${lvl}</div>
+    <div class="rank" style="font-size:20px">${rankFor(lvl)}</div>
+    ${ranks.length ? `<p>New rank unlocked.</p>` : ''}
+    ${skins.map(k => `<p>New fretboard skin: <b>${k.name}</b>. Pick it in Trophies.</p>`).join('')}
+    <button class="btn gold" type="button">Keep playing</button>`;
+  document.body.appendChild(d);
+  d.querySelector('button').onclick = () => d.remove();
+  d.querySelector('button').focus();
+}
+// ===== Menus: title, map, My Neck, trophies, settings =====
+const SCREENS = ['title', 'map', 'play', 'results', 'neck', 'trophies', 'settings'];
+const onShow = {};
+function show(id) {
+  SCREENS.forEach(s => { $(s).hidden = s !== id; });
+  if (id !== 'play' && id !== 'results') theme(highestWorld(), false);
+  if (onShow[id]) onShow[id]();
+  $(id).scrollTop = 0;
+}
+function modal(html, onGo) {
+  closeModal();
+  const m = document.createElement('div'); m.className = 'modal';
+  m.innerHTML = `<div class="card" role="dialog" aria-modal="true">${html}</div>`;
+  $('modalRoot').appendChild(m);
+  const go = m.querySelector('#mGo');
+  if (go) { go.onclick = () => { closeModal(); onGo && onGo(); }; setTimeout(() => go.focus(), 60); }
+  return m;
+}
+function closeModal() { $('modalRoot').innerHTML = ''; }
+function toast(icon, title, desc) {
+  const t = document.createElement('div'); t.className = 'toast';
+  t.innerHTML = `<span class="ti">${icon}</span><div><b>${title}</b><span>${desc}</span></div>`;
+  $('toasts').appendChild(t); setTimeout(() => t.remove(), 3700);
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// ---- Title ----
+const titleStrings = (() => {
+  const svg = $('titleStrings'), lines = [], vib = {};
+  let raf = null;
+  for (let i = 0; i < 6; i++) {
+    const s = 5 - i, y = 10 + i * 15.2;
+    const band = el('rect', { x: 0, y: y - 7.6, width: 620, height: 15.2, fill: 'transparent', style: 'cursor:pointer' }, svg);
+    const t = el('text', { x: 4, y: y + 4, fill: '#8ea7ae', 'font-size': 11, 'font-family': 'Chakra Petch, sans-serif', 'font-weight': 700 }, svg);
+    t.textContent = ['E', 'A', 'D', 'G', 'B', 'e'][s];
+    const p = el('path', { d: `M20 ${y} L616 ${y}`, stroke: s <= 2 ? '#c2ab82' : '#dfe6e9', 'stroke-width': 1 + (5 - s) * 0.45, fill: 'none', 'pointer-events': 'none' }, svg);
+    lines[s] = { p, y };
+    const go = e => { if (e.type === 'pointerdown') Sound.init(); if (!Sound.ready) return; Sound.sfx.note(OPEN_MIDI[s], s); vib[s] = performance.now(); if (!raf) raf = requestAnimationFrame(tick); };
+    band.addEventListener('pointerdown', go);
+    band.addEventListener('pointerenter', go);
+  }
+  function tick() {
+    const now = performance.now();
+    for (const s in vib) {
+      const t = (now - vib[s]) / 1000, { p, y } = lines[s], a = 6 * Math.exp(-t * 4) * Math.sin(t * 70);
+      if (t > 1.2) { p.setAttribute('d', `M20 ${y} L616 ${y}`); delete vib[s]; } else p.setAttribute('d', `M20 ${y} Q318 ${y + a} 616 ${y}`);
+    }
+    raf = Object.keys(vib).length ? requestAnimationFrame(tick) : null;
+  }
+  return { strum() { Sound.init(); [0, 1, 2, 3, 4, 5].forEach((s, i) => setTimeout(() => { Sound.sfx.note(OPEN_MIDI[s], s); vib[s] = performance.now(); if (!raf) raf = requestAnimationFrame(tick); }, i * 35)); } };
+})();
+onShow.title = () => {
+  const named = !!S.name;
+  $('nameForm').hidden = named; $('playerBox').hidden = !named; $('mainMenu').hidden = !named;
+  if (!named) { setTimeout(() => $('nameInput').focus(), 100); return; }
+  $('pName').textContent = S.name; $('pRank').textContent = rankFor(S.lvl);
+  $('pLevel').textContent = `Level ${S.lvl} · ${S.xp} / ${xpNeed(S.lvl)} XP`;
+  setTimeout(() => { $('pXp').style.width = (S.xp / xpNeed(S.lvl) * 100) + '%'; }, 60);
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  const alive = S.streak.last === today() || S.streak.last === today(y);
+  $('pStreak').textContent = alive && S.streak.count >= 2 ? `🔥 ${S.streak.count}-day streak` : '';
+  $('btnRush').textContent = isWorldOpen(2) ? `Fret Rush${S.rushBest ? ' · ' + S.rushBest.toLocaleString() : ''}` : '🔒 Fret Rush';
+};
+$('nameForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const n = $('nameInput').value.trim().slice(0, 24);
+  if (!n) { $('nameInput').focus(); return; }
+  S.name = n; save(); titleStrings.strum(); onShow.title();
+});
+$('btnPlay').onclick = () => { Sound.init(); show('map'); };
+$('btnRush').onclick = () => {
+  Sound.init();
+  if (!isWorldOpen(2)) return toast('🔒', 'Fret Rush is locked', 'Beat the Tuning Goblin (World 1 boss) to unlock it.');
+  modal(`<div class="eyebrow">Arcade</div><h2>Fret Rush</h2>
+    <p>60 seconds. Every note from the levels you've cleared. Name it or find it, as fast as you can.</p>
+    <p class="muted">A miss costs 3 seconds. Your best: <b>${S.rushBest.toLocaleString()}</b></p>
+    <button class="btn" id="mGo" type="button">Start</button>`, () => play('rush'));
+};
+$('btnNeck').onclick = () => show('neck');
+$('btnTrophies').onclick = () => show('trophies');
+$('btnSettings').onclick = () => show('settings');
+document.querySelectorAll('[data-go]').forEach(b => { b.onclick = () => show(b.dataset.go); });
+$('btnPause').onclick = () => pause();
+
+// ---- World map ----
+const MODE_TEXT = { name: 'Name it: a spot lights up, you pick the note.', find: 'Find it: a note gets called, you tap where it lives.', hunt: 'Hunt: tap every copy of the note.' };
+onShow.map = () => {
+  const box = $('worlds'); box.innerHTML = '';
+  $('mapStars').textContent = `★ ${totalStars()} / ${SEQ.length * 3}`;
+  let nextNode = null;
+  WORLDS.forEach(w => {
+    const open = isWorldOpen(w.n), seq = worldSeq(w.n), got = seq.reduce((a, id) => a + (S.stars[id] || 0), 0);
+    const sec = document.createElement('section');
+    sec.className = 'world' + (open ? '' : ' locked');
+    sec.style.setProperty('--w1', `color-mix(in srgb, ${w.accent[2]} 45%, ${w.bg[0]})`);
+    sec.style.setProperty('--w2', w.bg[1]);
+    sec.innerHTML = `<div class="world-head"><span class="eyebrow" style="color:${w.accent[1]}">World ${w.n}</span><h3>${w.name}</h3>
+      <span class="world-stars">★ ${got}/${seq.length * 3}</span></div>
+      <div class="world-sub">${w.sub}${open ? '' : ` · Beat the World ${w.n - 1} boss to unlock`}</div><div class="nodes"></div>`;
+    const nodes = sec.querySelector('.nodes');
+    if (open && w.lesson) {
+      const lb = document.createElement('button'); lb.type = 'button'; lb.className = 'iconbtn'; lb.textContent = 'Lesson';
+      lb.style.marginLeft = 'auto'; lb.onclick = () => showLesson(w);
+      sec.querySelector('.world-head').appendChild(lb);
+    }
+    seq.forEach((id, i) => {
+      if (i) { const ln = document.createElement('span'); ln.className = 'link'; nodes.appendChild(ln); }
+      const st = S.stars[id] || 0, op = isOpen(id), boss = id[0] === 'B';
+      const b = document.createElement('button'); b.type = 'button';
+      b.className = 'node' + (boss ? ' boss' : '') + (st ? ' done' : '') + (op && !st ? ' next' : '') + (op ? '' : ' lock');
+      const lv = boss ? null : LEVELS.find(l => l.id === id);
+      b.title = boss ? BOSSES[w.n].name : lv.name;
+      b.setAttribute('aria-label', (boss ? 'Boss: ' + BOSSES[w.n].name : 'Level ' + id + ', ' + lv.name) + (op ? `, ${st} stars` : ', locked'));
+      b.innerHTML = (boss ? bossSVG(BOSSES[w.n].look) : (op ? id : '🔒')) + `<span class="st">${'★'.repeat(st)}${'☆'.repeat(3 - st)}</span>`;
+      b.onclick = () => {
+        if (!op) return toast('🔒', 'Locked', boss ? 'Clear every level in this world first.' : 'Clear the level before this one.');
+        Sound.init(); Sound.sfx.click();
+        boss ? play(id) : levelCard(lv);
+      };
+      if (op && !st && !nextNode) nextNode = b;
+      nodes.appendChild(b);
+    });
+    box.appendChild(sec);
+  });
+  if (nextNode) setTimeout(() => nextNode.scrollIntoView({ block: 'center', behavior: 'smooth' }), 80);
+};
+function levelCard(lv) {
+  const st = S.stars[lv.id] || 0;
+  modal(`<div class="eyebrow">World ${lv.world} · Level ${lv.id}</div><h2>${lv.name}</h2><p>${lv.desc}</p>
+    <ul style="margin:0;padding-left:18px;color:var(--silver)">${lv.modes.map(m => `<li>${MODE_TEXT[m]}</li>`).join('')}
+    <li>${lv.modes.includes('hunt') ? lv.n + ' rounds' : lv.n + ' notes'}${lv.timer ? `, ${lv.timer} seconds each` : ', no time limit'}</li></ul>
+    <p class="muted" style="font-size:14px">★ 70% right · ★★ 90% · ★★★ 90% and under ${lv.target}s per note</p>
+    <div class="row"><span class="rank">${'★'.repeat(st)}${'☆'.repeat(3 - st)}</span>${S.best[lv.id] ? `<span class="muted">Best score ${S.best[lv.id].toLocaleString()}</span>` : ''}</div>
+    <div class="row"><button class="btn" id="mGo" type="button">Play</button><button class="btn ghost" id="mX" type="button">Back</button></div>`, () => play(lv.id));
+  $('mX').onclick = closeModal;
+}
+function showLesson(w, then) {
+  const L = w.lesson;
+  const m = modal(`<div class="eyebrow">World ${w.n} · ${w.name}</div><h2>${L.title}</h2>
+    ${L.body.map(p => `<p>${p}</p>`).join('')}
+    <svg class="lesson-art" viewBox="0 0 1000 260" role="img" aria-label="Fretboard example"></svg>
+    <div class="row">${L.marks.length ? '<button class="btn ghost small" id="mHear" type="button">Hear it</button>' : ''}<span class="spacer"></span>
+    <button class="btn" id="mGo" type="button">${then ? "Got it, let's play" : 'Got it'}</button></div>`, then);
+  const fb = new Fretboard(m.querySelector('svg'));
+  fb.draw({ view: L.view, skin: skinObj(), labels: w.labels, nums: true, lefty: S.set.lefty, onCell: (s, f) => { Sound.init(); Sound.sfx.note(midiOf(s, f), s); fb.vibrate(s, f); } });
+  L.marks.forEach(([s, f]) => fb.mark(s, f, 'found', noteName(pcOf(s, f), w.n === 6 ? 'both' : 'sharp')));
+  const hear = m.querySelector('#mHear');
+  if (hear) hear.onclick = () => { Sound.init(); L.marks.forEach(([s, f], i) => setTimeout(() => { Sound.sfx.note(midiOf(s, f), s); fb.vibrate(s, f); }, i * 330)); };
+}
+
+// ---- My Neck ----
+const HEAT = ['#2a3940', '#ff5b6c', '#ffcb4d', '#3ee591', '#8ff3f0'];
+function neckPct(filter) {
+  let sum = 0, n = 0;
+  for (let s = 0; s < 6; s++) for (let f = 0; f <= 12; f++) if (filter(s, f)) { const m = S.mastery[s + '-' + f]; sum += m ? m.m : 0; n++; }
+  return n ? Math.round(sum / n * 100) : 0;
+}
+onShow.neck = () => {
+  const fb = new Fretboard($('neckBoard'));
+  const info = (s, f) => {
+    const m = S.mastery[s + '-' + f];
+    $('neckInfo').innerHTML = `<b>${noteName(pcOf(s, f), 'both')}</b>&nbsp;· ${STRING_NAME[s]} string, fret ${f} · ${m ? `${m.c} of ${m.a} right, ${(m.t / 1000).toFixed(1)}s average` : 'not tried yet'}`;
+  };
+  fb.draw({ view: 15, skin: skinObj(), labels: 'names', nums: true, lefty: S.set.lefty, onCell: (s, f) => { Sound.init(); Sound.sfx.note(midiOf(s, f), s); fb.vibrate(s, f); info(s, f); } });
+  for (let s = 0; s < 6; s++) for (let f = 0; f <= 15; f++) {
+    const band = masteryBand(S.mastery[s + '-' + f]);
+    fb.heat(s, f, HEAT[band], band === 4, band ? noteName(pcOf(s, f), 'sharp') : '');
+  }
+  $('neckInfo').innerHTML = `Whole neck (frets 0–12): <b>${neckPct(() => true)}%</b> · ${masteredCount()} spots mastered`;
+  const meter = (label, pct) => `<div class="meter"><span>${label}</span><div class="bar"><i style="width:${pct}%"></i></div><b>${pct}%</b></div>`;
+  $('neckStrings').innerHTML = [5, 4, 3, 2, 1, 0].map(s => meter(`${STRING_NUM[s]} · ${STRING_NAME[s]}`, neckPct(x => x === s))).join('');
+  $('neckNotes').innerHTML = [0, 2, 4, 5, 7, 9, 11, 1, 3, 6, 8, 10].map(pc => meter(noteName(pc, 'both'), neckPct((s, f) => pcOf(s, f) === pc))).join('');
+};
+$('btnWeak').onclick = () => { Sound.init(); play('practice'); };
+
+// ---- Trophies ----
+onShow.trophies = () => {
+  $('achCount').textContent = `${Object.keys(S.ach).length} / ${ACHIEVEMENTS.length}`;
+  $('skins').innerHTML = SKINS.map(k => {
+    const open = S.lvl >= k.lvl;
+    return `<button class="skin${S.skin === k.id ? ' sel' : ''}" data-skin="${k.id}" type="button" ${open ? '' : 'disabled'}>
+      <div class="sw" style="background:radial-gradient(circle at 30% 50%, ${k.inlay} 0 5px, transparent 6px), radial-gradient(circle at 70% 50%, ${k.inlay} 0 5px, transparent 6px), repeating-linear-gradient(90deg, transparent 0 46px, ${k.fret} 46px 49px), linear-gradient(${k.wood[0]}, ${k.wood[1]})"></div>
+      <div class="lbl"><b>${k.name}</b>${open ? (S.skin === k.id ? 'Equipped' : 'Tap to equip') : 'Unlocks at level ' + k.lvl}</div></button>`;
+  }).join('');
+  $('skins').querySelectorAll('.skin').forEach(b => b.onclick = () => { S.skin = b.dataset.skin; save(); Sound.init(); Sound.sfx.click(); onShow.trophies(); });
+  $('achGrid').innerHTML = ACHIEVEMENTS.map(a => `<div class="ach${S.ach[a.id] ? '' : ' locked'}"><span class="ti">${a.icon}</span><b>${a.name}</b><small>${a.desc}</small>${S.ach[a.id] ? `<small style="color:var(--gold)">Earned ${S.ach[a.id]}</small>` : ''}</div>`).join('');
+};
+
+// ---- Settings, report, save codes ----
+function hash(str) {
+  let h1 = 0x811c9dc5, h2 = 0x1b873593;
+  const s = 'evhs-fretstorm|' + str;
+  for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); h1 = Math.imul(h1 ^ c, 16777619); h2 = Math.imul(h2 ^ c, 2246822519) + 7; }
+  const a = (h1 >>> 0).toString(36).toUpperCase().padStart(7, '0').slice(-4), b = (h2 >>> 0).toString(36).toUpperCase().padStart(7, '0').slice(-4);
+  return a + '-' + b;
+}
+function buildReport() {
+  const levels = LEVELS.filter(l => S.stars[l.id] > 0).length, bosses = WORLDS.filter(w => S.stars['B' + w.n] > 0).length;
+  const lines = [
+    'FRETSTORM PROGRESS REPORT',
+    `Student: ${S.name || '(no name)'}`,
+    `Date: ${today()}`,
+    `Rank: ${rankFor(S.lvl)} (level ${S.lvl})`,
+    `Stars: ${totalStars()} of ${SEQ.length * 3}`,
+    `Levels cleared: ${levels} of ${LEVELS.length}`,
+    `Bosses beaten: ${bosses} of ${WORLDS.length}`,
+    `Neck mastery (frets 0-12): ${neckPct(() => true)}%`,
+    `Notes answered: ${S.tot.ans.toLocaleString()} (${S.tot.ans ? Math.round(S.tot.ok / S.tot.ans * 100) : 0}% right)`,
+    `Best combo: ${S.tot.bestCombo}`,
+    `Fret Rush best: ${S.rushBest.toLocaleString()}`,
+    `Day streak: ${S.streak.count}`,
+    `Unlock-all switch used: ${S.unlockAllUsed ? 'Yes' : 'No'}`,
+  ];
+  return lines.join('\n') + '\nCheck code: ' + hash(lines.join('\n'));
+}
+function copyText(text, fallbackEl) {
+  const done = () => toast('📋', 'Copied', 'Paste it wherever your teacher asked.');
+  const sel = () => { if (!fallbackEl) return; const r = document.createRange(); r.selectNodeContents(fallbackEl); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('📋', 'Text selected', 'Press Ctrl+C (or ⌘+C) to copy it.'); };
+  try { navigator.clipboard.writeText(text).then(done, sel); } catch (e) { sel(); }
+}
+function applySettings() {
+  Sound.set({ sfx: S.set.sfx, music: S.set.music, vol: S.set.vol });
+  FX.reduce = S.set.reduce; BG.reduce = S.set.reduce;
+  document.body.classList.toggle('reduce', S.set.reduce);
+}
+const sw = (id, label, help, on) => `<div class="set-row"><label for="${id}">${label}${help ? `<small>${help}</small>` : ''}</label><input type="checkbox" class="switch" id="${id}" ${on ? 'checked' : ''}></div>`;
+onShow.settings = () => {
+  $('setMain').innerHTML = `<h3>Player</h3>
+    <div class="set-row"><label for="sName">Name</label><input class="field" id="sName" maxlength="24" value="${esc(S.name)}" style="max-width:220px"></div>
+    ${sw('sSfx', 'Sound effects', 'Every right answer plays the real pitch.', S.set.sfx)}
+    ${sw('sMusic', 'Music', 'A band that gets louder as your combo grows.', S.set.music)}
+    <div class="set-row"><label for="sVol">Volume</label><input type="range" id="sVol" min="0" max="1" step="0.05" value="${S.set.vol}" style="max-width:220px;width:50%"></div>
+    ${sw('sLefty', 'Left-handed fretboard', 'Flips the neck so the nut is on the right.', S.set.lefty)}
+    ${sw('sNums', 'Always show fret numbers', 'Keeps numbers on in the later worlds too.', S.set.nums)}
+    <div class="set-row"><label for="sNaming">Names for the in-between notes</label><select class="field" id="sNaming" style="max-width:220px">
+      <option value="both">Sharps and flats (C♯/D♭)</option><option value="sharp">Sharps only (C♯)</option><option value="flat">Flats only (D♭)</option></select></div>
+    ${sw('sReduce', 'Reduce motion', 'Fewer particles, no screen shake.', S.set.reduce)}`;
+  $('sNaming').value = S.set.naming;
+  $('sName').onchange = e => { const v = e.target.value.trim(); if (v) { S.name = v.slice(0, 24); save(); } };
+  const bind = (id, key) => { $(id).onchange = e => { S.set[key] = e.target.checked; save(); applySettings(); }; };
+  bind('sSfx', 'sfx'); bind('sMusic', 'music'); bind('sLefty', 'lefty'); bind('sNums', 'nums'); bind('sReduce', 'reduce');
+  $('sVol').oninput = e => { S.set.vol = +e.target.value; applySettings(); }; $('sVol').onchange = () => { save(); Sound.init(); Sound.sfx.note(52); };
+  $('sNaming').onchange = e => { S.set.naming = e.target.value; save(); };
+
+  const rep = buildReport();
+  $('setReport').innerHTML = `<h3>Progress report</h3><p class="muted" style="margin:6px 0 12px">Copy this and turn it in when your teacher asks. The check code at the bottom changes if anything above it is edited.</p>
+    <pre class="report" id="repText">${esc(rep)}</pre><div class="row" style="margin-top:12px"><button class="btn small" id="repCopy" type="button">Copy report</button></div>`;
+  $('repCopy').onclick = () => copyText(rep, $('repText'));
+
+  $('setSave').innerHTML = `<h3>Move your progress</h3><p class="muted" style="margin:6px 0 12px">Progress is saved in this browser only. To keep playing on another device, copy your save code here and load it there.</p>
+    <div class="row"><button class="btn small" id="svCopy" type="button">Copy my save code</button></div>
+    <textarea class="field" id="svIn" placeholder="Paste a save code here to load it" style="margin-top:12px" aria-label="Save code"></textarea>
+    <div class="row" style="margin-top:10px"><button class="btn ghost small" id="svLoad" type="button">Load save code</button><span id="svMsg" class="muted"></span></div>`;
+  $('svCopy').onclick = () => {
+    const code = 'FS1:' + btoa(unescape(encodeURIComponent(JSON.stringify(S))));
+    $('svIn').value = code; copyText(code, null);
+  };
+  $('svLoad').onclick = () => {
+    const raw = $('svIn').value.trim();
+    let data = null;
+    try { if (raw.startsWith('FS1:')) data = JSON.parse(decodeURIComponent(escape(atob(raw.slice(4))))); } catch (e) { data = null; }
+    if (!data || data.v !== 1) { $('svMsg').textContent = 'That code did not work. Copy the whole thing, starting with FS1:'; return; }
+    $('svMsg').innerHTML = `This replaces the progress on this device with <b>${esc(data.name || 'that save')}</b> (level ${data.lvl}). <button class="btn small" id="svYes" type="button">Replace</button>`;
+    $('svYes').onclick = () => { S = merge(freshSave(), data); save(); applySettings(); toast('💾', 'Save loaded', `Welcome back, ${S.name}.`); show('title'); };
+  };
+
+  $('setTeacher').innerHTML = `<h3>For teachers</h3>
+    <p class="muted" style="margin:6px 0 12px">Paste a student's report to check that nothing in it was changed.</p>
+    <textarea class="field" id="tIn" placeholder="Paste a progress report here" aria-label="Progress report to check"></textarea>
+    <div class="row" style="margin-top:10px"><button class="btn ghost small" id="tCheck" type="button">Check report</button><span id="tMsg"></span></div>
+    ${sw('sUnlock', 'Unlock all levels', 'For demos and review. Reports will show that it was used.', S.unlockAll)}
+    <div class="set-row"><label>Reset all progress<small>Erases stars, XP, and trophies on this device.</small></label><button class="btn ghost small" id="tReset" type="button">Reset</button></div>`;
+  $('tCheck').onclick = () => {
+    const lines = $('tIn').value.replace(/\r/g, '').split('\n').map(l => l.trim()).filter(Boolean);
+    const i = lines.findIndex(l => l.startsWith('Check code:'));
+    const ok = i > 0 && hash(lines.slice(0, i).join('\n')) === lines[i].slice(11).trim();
+    $('tMsg').innerHTML = ok ? '<b style="color:var(--good)">✓ Report is unchanged.</b>' : '<b style="color:var(--bad)">✗ This report was edited or is incomplete.</b>';
+  };
+  $('sUnlock').onchange = e => { S.unlockAll = e.target.checked; if (S.unlockAll) S.unlockAllUsed = true; save(); };
+  $('tReset').onclick = () => {
+    $('tReset').outerHTML = `<span class="row"><span style="color:var(--bad)">Erase everything?</span><button class="btn small" id="tYes" type="button">Erase</button></span>`;
+    $('tYes').onclick = () => { const set = S.set; S = freshSave(); S.set = set; save(); toast('🧹', 'Progress erased', 'Starting fresh.'); show('title'); };
+  };
+};
+
+// ---- Keyboard ----
+addEventListener('keydown', e => {
+  if (e.target.matches && e.target.matches('input, textarea, select')) return;
+  if ($('play').hidden || !run) return;
+  if (e.key === 'Escape') { if (run.paused) { closeModal(); resume(); } else pause(); return; }
+  const map = { c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11 }, k = e.key.toLowerCase();
+  if (k in map && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    const pc = (map[k] + (e.shiftKey ? 1 : 0)) % 12;
+    onNote(pc, document.querySelector(`.key[data-pc="${pc}"]`));
+    e.preventDefault();
+  }
+});
+document.addEventListener('visibilitychange', () => { if (document.hidden && run && !run.over && !$('play').hidden) pause(); });
+
+// ---- Start ----
+applySettings();
+show('title');
+</script></body></html>
