@@ -316,6 +316,38 @@ body.reduce *, body.reduce *::before, body.reduce *::after { animation-duration:
   .hint-chip { font-size: 11px; padding: 2px 6px; }
   .rotate-tip { display: none !important; }
 }
+/* Class leaderboard */
+.menu.has-lb #btnSettings { grid-column: 1 / -1; }
+.seg { display: inline-flex; gap: 3px; padding: 3px; background: #0008; border: 1px solid var(--line); border-radius: 12px; }
+.seg button { font: 700 14px var(--body); color: var(--muted); background: transparent; border: 0; border-radius: 9px; padding: 8px 12px; cursor: pointer; }
+.seg button.on { background: var(--panel-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent); }
+.seg.wide { display: flex; width: 100%; }
+.seg.wide button { flex: 1; font: 400 15px var(--display); letter-spacing: .02em; padding: 10px 6px; }
+.field.small { padding: 8px 10px; font-size: 15px; }
+.lb-list { display: flex; flex-direction: column; gap: 6px; }
+.lb-row {
+  display: grid; grid-template-columns: 2.4em minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+}
+.lb-pos { font: 400 18px var(--display); text-align: center; color: var(--muted); }
+.lb-row.p1 { border-color: #ffcb4d99; box-shadow: 0 0 18px #ffcb4d26; }
+.lb-row.p1, .lb-row.p2, .lb-row.p3 { font-size: 17px; }
+.lb-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-name em { font-style: normal; font-size: 12px; color: #04161a; background: var(--accent); border-radius: 6px; padding: 1px 6px; margin-left: 6px; vertical-align: 2px; }
+.lb-name small { font-size: 12px; color: var(--muted); margin-left: 8px; }
+.lb-score { font: 400 17px var(--display); text-align: right; font-variant-numeric: tabular-nums; }
+.lb-score small { display: block; font: 600 12px var(--body); color: var(--muted); }
+.lb-row.me { border-color: var(--accent); background: color-mix(in srgb, var(--teal-deep) 32%, var(--panel)); }
+.lb-gap { text-align: center; color: var(--muted); font-size: 12px; }
+.lb-empty { text-align: center; color: var(--silver); }
+.lb-mebar { display: flex; align-items: center; gap: 12px; justify-content: space-between; flex-wrap: wrap; color: var(--silver); }
+.lb-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-top: 12px; }
+.lb-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.lb-form .field { padding: 10px 12px; font-size: 16px; }
+.lb-line { min-height: 1.4em; display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; text-align: center; }
+.lb-line b { color: var(--gold); font-family: var(--display); font-weight: 400; }
+@media (max-width: 440px) { .seg.wide button { font-size: 12px; white-space: nowrap; padding: 10px 4px; } .lb-row { padding: 10px 10px; gap: 8px; } }
 </style></head><body>
 <canvas id="bg" aria-hidden="true"></canvas>
 <div id="flash" aria-hidden="true"></div>
@@ -339,6 +371,7 @@ body.reduce *, body.reduce *::before, body.reduce *::after { animation-duration:
       <div class="menu" id="mainMenu" hidden>
         <button class="btn big" id="btnPlay" type="button">Play</button>
         <button class="btn ghost" id="btnRush" type="button">Fret Rush</button>
+        <button class="btn ghost" id="btnLeaders" type="button" hidden>🏆 Leaderboard</button>
         <button class="btn ghost" id="btnNeck" type="button">My Neck</button>
         <button class="btn ghost" id="btnTrophies" type="button">Trophies</button>
         <button class="btn ghost" id="btnSettings" type="button">Settings</button>
@@ -429,6 +462,31 @@ body.reduce *, body.reduce *::before, body.reduce *::after { animation-duration:
       <div class="skins" id="skins"></div>
       <h3 style="margin-top:8px">Achievements</h3>
       <div class="ach-grid" id="achGrid"></div>
+    </div>
+  </section>
+
+  <section id="leaders" class="screen" hidden>
+    <div class="wrap" style="max-width:760px">
+      <div class="topbar">
+        <button class="iconbtn" data-go="title" type="button" aria-label="Back to menu">←</button>
+        <h2>Leaderboard</h2>
+        <button class="iconbtn" id="lbRefresh" type="button" aria-label="Refresh the leaderboard">↻</button>
+      </div>
+      <div id="lbJoin"></div>
+      <div class="seg wide" id="lbTabs">
+        <button type="button" data-tab="rush">⚡ Fret Rush</button>
+        <button type="button" data-tab="stars">★ Stars</button>
+        <button type="button" data-tab="xp">XP Rank</button>
+      </div>
+      <div class="row">
+        <select class="field small" id="lbPeriod" aria-label="Which class"></select>
+        <div class="seg" id="lbWhen">
+          <button type="button" data-when="week">This week</button>
+          <button type="button" data-when="all">All time</button>
+        </div>
+      </div>
+      <div class="lb-list" id="lbList" aria-live="polite"></div>
+      <p class="muted" id="lbStatus" style="font-size:13px"></p>
     </div>
   </section>
 
@@ -1059,7 +1117,8 @@ const SAVE_KEY = 'fretstorm.v1';
 function today(d = new Date()) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 const freshSave = () => ({ v: 1, name: '', xp: 0, lvl: 1, stars: {}, best: {}, mastery: {},
   tot: { ans: 0, ok: 0, accOk: 0, bestCombo: 0 }, ach: {}, skin: 'rosewood', streak: { last: '', count: 0 },
-  rushBest: 0, rushNotes: 0, lessons: {}, unlockAll: false, unlockAllUsed: false, created: today(),
+  rushBest: 0, rushNotes: 0, rushWeek: { key: '', best: 0 }, lessons: {}, unlockAll: false, unlockAllUsed: false, created: today(),
+  lb: { on: false, name: '', init: '', period: '', dirty: false },
   set: { sfx: true, music: true, vol: 0.8, lefty: false, nums: false, naming: 'both', reduce: false } });
 function merge(a, b) {
   for (const k in b) {
@@ -1206,7 +1265,7 @@ function play(id) {
     hp: lv.boss ? lv.boss.hp : 0, hearts: lv.boss ? lv.boss.hearts : 0, over: false, angry: false };
   theme(world, true);
   show('play');
-  board.draw({ view: lv.view, skin: skinObj(), labels: world.labels, nums: world.nums || S.set.nums, lefty: S.set.lefty, onCell });
+  board.draw({ view: lv.view, skin: skinObj(), labels: lv.rush ? 'numbers' : world.labels, nums: world.nums || S.set.nums, lefty: S.set.lefty, onCell });
   board.setActive(lv.strings);
   buildPad(lv.acc);
   $('pad').hidden = !lv.modes.includes('name');
@@ -1530,7 +1589,7 @@ function finish() {
   if (!lv.rush && !lv.practice && stars > prev) S.stars[lv.id] = stars;
   if (!lv.rush && !lv.practice) S.best[lv.id] = Math.max(S.best[lv.id] || 0, run.score);
   let newBest = false;
-  if (lv.rush) { if (run.score > S.rushBest) { S.rushBest = run.score; newBest = S.rushBest > 0; } S.rushNotes = Math.max(S.rushNotes, run.ok); if (run.ok >= 25) grant('rush25'); }
+  if (lv.rush) { noteRushWeek(run.score); if (run.score > S.rushBest) { S.rushBest = run.score; newBest = S.rushBest > 0; } S.rushNotes = Math.max(S.rushNotes, run.ok); if (run.ok >= 25) grant('rush25'); }
   if (stars === 3 && !lv.boss) grant('three');
   if (!lv.boss && !lv.rush && !lv.practice && run.bad === 0 && run.ok >= 10) grant('flawless');
   const bonus = stars * 25 + (firstClear ? 50 : 0) + (lv.boss && won ? 100 : 0);
@@ -1539,6 +1598,7 @@ function finish() {
   const ups = addXp(run.xp);
   checkAch(); save();
   renderResults({ lv, stars, won, acc, avg, bonus, ups, newBest, firstClear });
+  lbAfterRun(lv);
 }
 function renderResults(r) {
   const { lv } = r, R = $('resultsBox');
@@ -1555,6 +1615,7 @@ function renderResults(r) {
   R.innerHTML = `
     <div class="eyebrow">${lv.boss ? 'Boss · World ' + lv.world : lv.rush ? 'Fret Rush' : lv.practice ? 'Practice' : 'Level ' + lv.id + ' · ' + lv.name}</div>
     ${head}
+    ${lv.rush && LB_URL ? '<p class="lb-line" id="rLb"></p>' : ''}
     ${lv.rush || lv.practice ? '' : `<div class="stars">${[0, 1, 2].map(i => `<span class="star" id="st${i}">★</span>`).join('')}</div><p class="muted" style="font-size:13px">${rule}</p>`}
     <div class="stats">
       <div class="stat"><b>${run.score.toLocaleString()}</b><span>Score</span></div>
@@ -1594,8 +1655,186 @@ function levelUp(lvl, ups) {
   d.querySelector('button').onclick = () => d.remove();
   d.querySelector('button').focus();
 }
+// ===== Class leaderboard =====
+// Scores are kept in the teacher's Google Sheet (see leaderboard/Code.gs).
+// LB_URL is that Sheet's web app address. Leave it empty to turn the leaderboard off.
+const LB_URL = '';
+const LB_TOP = 10;
+const LB_PERIODS = ['1', '2', '3', '4', '5', '6', '7', 'X'];
+const periodName = p => (p === 'X' ? 'Other' : 'Period ' + p);
+const lbClean = (s, n) => String(s || '').replace(/[^\p{L}' -]/gu, '').replace(/^[^\p{L}]+/u, '').replace(/\s+/g, ' ').trim().slice(0, n);
+const lbKey = p => [p.name, p.init, p.period].join('|').toLowerCase();
+const lbMe = () => (LB_URL && S.lb.on ? S.lb : null);
+let lbData = null, lbBusy = null, lbErr = false;
+const lbView = { tab: 'rush', when: 'week', period: null };
+
+// Monday of this week, as YYYY-MM-DD
+function weekKey(d = new Date()) { return today(new Date(d.getFullYear(), d.getMonth(), d.getDate() - (d.getDay() + 6) % 7)); }
+function xpTotal() { let t = S.xp; for (let l = 1; l < S.lvl; l++) t += xpNeed(l); return t; }
+function noteRushWeek(score) {
+  const wk = weekKey();
+  if (S.rushWeek.key !== wk) S.rushWeek = { key: wk, best: 0 };
+  S.rushWeek.best = Math.max(S.rushWeek.best, score);
+}
+
+async function lbCall(body) {
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 20000);
+  try {
+    const r = body
+      ? await fetch(LB_URL, { method: 'POST', body: JSON.stringify(body), signal: ctl.signal })
+      : await fetch(LB_URL + (LB_URL.includes('?') ? '&' : '?') + 't=' + Date.now(), { signal: ctl.signal });
+    const d = await r.json();
+    if (!d || !d.ok) throw new Error((d && d.error) || 'bad reply');
+    lbData = d; lbData.at = Date.now(); lbErr = false;
+    return d;
+  } catch (e) { lbErr = true; throw e; } finally { clearTimeout(t); }
+}
+// Send this player's totals (if they joined) and get the fresh board back
+function lbSync(extra) {
+  if (!LB_URL) return Promise.reject(new Error('off'));
+  if (lbBusy) return extra ? lbBusy.catch(() => {}).then(() => lbSync(extra)) : lbBusy;
+  const me = lbMe();
+  let body = null;
+  if (me || extra) {
+    const wk = S.rushWeek.key === weekKey() ? S.rushWeek : { key: weekKey(), best: 0 };
+    const who = extra && extra.who ? extra.who : me;
+    body = Object.assign({ v: 1, name: who.name, init: who.init, period: who.period, rushBest: S.rushBest, week: wk.key, weekBest: wk.best,
+      stars: totalStars(), lvl: S.lvl, xp: xpTotal() }, extra || {});
+    delete body.who;
+  }
+  lbBusy = lbCall(body).then(d => { if (me && !(extra && extra.leave)) { S.lb.dirty = false; save(); } return d; })
+    .finally(() => { lbBusy = null; });
+  return lbBusy;
+}
+
+// Ranked rows for one view: { tab: rush|stars|xp, when: week|all, period: '' for everyone }
+function lbRows(v) {
+  if (!lbData) return [];
+  const meKey = lbMe() ? lbKey(S.lb) : '';
+  const list = lbData.rows
+    .map(r => ({ name: r[0], init: r[1], period: String(r[2]), rush: r[3], wk: r[4], wkBest: r[5], stars: r[6], lvl: r[7], xp: r[8] }))
+    .filter(e => !v.period || e.period === v.period)
+    .map(e => Object.assign(e, { me: lbKey(e) === meKey, score: v.tab === 'rush' ? (v.when === 'week' ? (e.wk === lbData.week ? e.wkBest : 0) : e.rush) : v.tab === 'stars' ? e.stars : e.xp }))
+    .filter(e => e.score > 0)
+    .sort((a, b) => b.score - a.score || b.xp - a.xp);
+  list.forEach((e, i) => { e.pos = i && e.score === list[i - 1].score ? list[i - 1].pos : i + 1; });
+  return list;
+}
+const lbPosOf = v => { const e = lbRows(v).find(x => x.me); return e ? e.pos : 0; };
+
+// ---- Leaderboard screen ----
+function lbScore(e, tab) {
+  if (tab === 'rush') return e.score.toLocaleString();
+  if (tab === 'stars') return `★ ${e.score}`;
+  return `Lv ${e.lvl}<small>${rankFor(e.lvl)}</small>`;
+}
+function lbRowHtml(e, tab, showPer) {
+  const medal = ['🥇', '🥈', '🥉'][e.pos - 1];
+  return `<div class="lb-row${e.me ? ' me' : ''}${e.pos <= 3 ? ' p' + e.pos : ''}">
+    <span class="lb-pos">${medal || e.pos}</span>
+    <span class="lb-name">${esc(e.name)} ${esc(e.init)}.${e.me ? ' <em>you</em>' : ''}${showPer ? `<small>${e.period === 'X' ? 'Other' : 'P' + esc(e.period)}</small>` : ''}</span>
+    <span class="lb-score">${lbScore(e, tab)}</span></div>`;
+}
+function lbRenderList() {
+  if ($('leaders').hidden) return;
+  const v = lbView;
+  $('lbTabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.tab === v.tab));
+  $('lbWhen').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.when === v.when));
+  $('lbWhen').hidden = v.tab !== 'rush';
+  $('lbPeriod').value = v.period;
+  const L = $('lbList'), st = $('lbStatus');
+  if (!lbData) { L.innerHTML = ''; st.textContent = lbErr ? "Couldn't reach the leaderboard. Check your internet, then tap ↻." : 'Loading the leaderboard…'; return; }
+  const rows = lbRows(v), top = rows.slice(0, LB_TOP), me = rows.find(e => e.me);
+  let html = top.map(e => lbRowHtml(e, v.tab, !v.period)).join('');
+  if (me && !top.includes(me)) html += `<div class="lb-gap">• • •</div>` + lbRowHtml(me, v.tab, !v.period);
+  if (!rows.length) html = `<div class="card lb-empty">${v.tab === 'rush' && v.when === 'week' ? 'No Fret Rush scores yet this week. The board resets every Monday, so anyone can take #1.' : 'No scores here yet. Be the first.'}</div>`;
+  L.innerHTML = html;
+  const who = v.period ? periodName(v.period) : 'all classes';
+  const what = v.tab === 'rush' ? `Fret Rush, ${v.when === 'week' ? 'this week' : 'all time'}` : v.tab === 'stars' ? 'Most stars' : 'Highest XP';
+  st.textContent = `${what} · ${who}${lbErr ? ' · Offline, showing the last scores we got' : ''}`;
+}
+function lbRenderMe(editing) {
+  const box = $('lbJoin'), me = lbMe();
+  if (me && !editing) {
+    box.innerHTML = `<div class="lb-mebar"><span>You're on the board as <b>${esc(me.name)} ${esc(me.init)}.</b> · ${periodName(me.period)}</span>
+      <button class="iconbtn" id="lbEdit" type="button">Edit</button></div>`;
+    $('lbEdit').onclick = () => lbRenderMe(true);
+    return;
+  }
+  const cur = me || { name: lbClean((S.name || '').split(' ')[0], 14), init: '', period: '' };
+  box.innerHTML = `<div class="card">
+    <h3>${me ? 'Your leaderboard name' : 'Join the class leaderboard'}</h3>
+    <p class="muted" style="margin-top:6px">Only your first name, last initial, and class period are shown. Your teacher can remove any name.</p>
+    <form class="lb-form" id="lbForm">
+      <label>First name<input class="field" id="lbName" maxlength="14" autocomplete="off" value="${esc(cur.name)}"></label>
+      <label>Last initial<input class="field" id="lbInit" maxlength="2" autocomplete="off" style="width:5.5em" value="${esc(cur.init)}"></label>
+      <label>Class<select class="field" id="lbPer"><option value="">Pick one</option>${LB_PERIODS.map(p => `<option value="${p}"${p === cur.period ? ' selected' : ''}>${periodName(p)}</option>`).join('')}</select></label>
+      <button class="btn" type="submit">${me ? 'Save' : 'Join'}</button>
+      ${me ? '<button class="btn ghost" id="lbCancel" type="button">Cancel</button>' : ''}
+    </form>
+    <div class="row" style="margin-top:10px"><span id="lbMsg" class="muted"></span>${me ? '<span class="spacer"></span><button class="iconbtn" id="lbLeave" type="button">Leave the board</button>' : ''}</div>
+  </div>`;
+  if (me) {
+    $('lbCancel').onclick = () => lbRenderMe(false);
+    $('lbLeave').onclick = () => {
+      $('lbMsg').innerHTML = `<span style="color:var(--bad)">Take your name off the board?</span> <button class="btn small" id="lbLeaveYes" type="button">Leave</button>`;
+      $('lbLeaveYes').onclick = () => {
+        const who = { name: me.name, init: me.init, period: me.period };
+        S.lb.on = false; save();
+        lbSync({ who, leave: true }).catch(() => {}).then(() => { lbRenderMe(false); lbRenderList(); });
+        toast('👋', 'You left the leaderboard', 'Your progress in the game is still saved.');
+        lbRenderMe(false); lbRenderList();
+      };
+    };
+  }
+  $('lbForm').onsubmit = e => {
+    e.preventDefault();
+    const name = lbClean($('lbName').value, 14), init = lbClean($('lbInit').value, 2).replace(/[^\p{L}]/gu, '').toUpperCase(), period = $('lbPer').value;
+    const msg = t => { $('lbMsg').innerHTML = `<span style="color:var(--bad)">${t}</span>`; };
+    if (!name) return msg('Type your first name.');
+    if (!init) return msg('Type the first letter of your last name.');
+    if (!period) return msg('Pick your class period.');
+    const oldKey = me ? lbKey(me) : '';
+    S.lb = { on: true, name, init, period, dirty: true }; save();
+    if (!me || lbView.period === me.period) lbView.period = period;
+    Sound.init(); Sound.sfx.unlock();
+    lbRenderMe(false); lbRefresh(oldKey && oldKey !== lbKey(S.lb) ? { oldKey } : null);
+  };
+}
+function lbRefresh(extra) {
+  $('lbStatus').textContent = 'Updating…';
+  const p = lbMe() && (S.lb.dirty || extra) ? lbSync(extra || undefined) : lbCall(null);
+  p.catch(() => {}).then(lbRenderList);
+}
+function lbOpen() {
+  if (lbView.period === null) lbView.period = lbMe() ? S.lb.period : '';
+  lbRenderMe(false); lbRenderList(); lbRefresh();
+}
+$('lbTabs').querySelectorAll('button').forEach(b => { b.onclick = () => { lbView.tab = b.dataset.tab; Sound.sfx.click(); lbRenderList(); }; });
+$('lbWhen').querySelectorAll('button').forEach(b => { b.onclick = () => { lbView.when = b.dataset.when; Sound.sfx.click(); lbRenderList(); }; });
+$('lbPeriod').innerHTML = `<option value="">All classes</option>` + LB_PERIODS.map(p => `<option value="${p}">${periodName(p)}</option>`).join('');
+$('lbPeriod').onchange = e => { lbView.period = e.target.value; lbRenderList(); };
+$('lbRefresh').onclick = () => { Sound.init(); Sound.sfx.click(); lbRefresh(); };
+
+// After any finished run: post the new totals. On Fret Rush, show where the player landed.
+function lbAfterRun(lv) {
+  if (!LB_URL) return;
+  const line = $('rLb');
+  if (!lbMe()) {
+    if (line) { line.innerHTML = `<button class="btn ghost small" id="rLbJoin" type="button">🏆 Join the class leaderboard</button>`; $('rLbJoin').onclick = () => { run = null; show('leaders'); }; }
+    return;
+  }
+  S.lb.dirty = true; save();
+  if (line) line.textContent = 'Posting your score…';
+  lbSync().then(() => {
+    if (!line || !line.isConnected || !lv.rush) return;
+    const per = lbPosOf({ tab: 'rush', when: 'week', period: S.lb.period }), all = lbPosOf({ tab: 'rush', when: 'week', period: '' });
+    line.innerHTML = per ? `This week: <b>#${per}</b> in ${periodName(S.lb.period)} · <b>#${all}</b> in all classes <button class="iconbtn" id="rLbOpen" type="button">See board</button>` : 'Posted to the leaderboard.';
+    const b = $('rLbOpen'); if (b) b.onclick = () => { run = null; lbView.tab = 'rush'; lbView.when = 'week'; show('leaders'); };
+  }).catch(() => { if (line && line.isConnected) line.textContent = "Couldn't reach the leaderboard. Your score will post next time."; });
+}
 // ===== Menus: title, map, My Neck, trophies, settings =====
-const SCREENS = ['title', 'map', 'play', 'results', 'neck', 'trophies', 'settings'];
+const SCREENS = ['title', 'map', 'play', 'results', 'neck', 'trophies', 'settings', 'leaders'];
 const onShow = {};
 function show(id) {
   SCREENS.forEach(s => { $(s).hidden = s !== id; });
@@ -1655,6 +1894,7 @@ onShow.title = () => {
   const y = new Date(); y.setDate(y.getDate() - 1);
   const alive = S.streak.last === today() || S.streak.last === today(y);
   $('pStreak').textContent = alive && S.streak.count >= 2 ? `🔥 ${S.streak.count}-day streak` : '';
+  $('btnLeaders').hidden = !LB_URL; $('mainMenu').classList.toggle('has-lb', !!LB_URL);
   $('btnRush').textContent = isWorldOpen(2) ? `Fret Rush${S.rushBest ? ' · ' + S.rushBest.toLocaleString() : ''}` : '🔒 Fret Rush';
 };
 $('nameForm').addEventListener('submit', e => {
@@ -1673,6 +1913,8 @@ $('btnRush').onclick = () => {
     <button class="btn" id="mGo" type="button">Start</button>`, () => play('rush'));
 };
 $('btnNeck').onclick = () => show('neck');
+$('btnLeaders').onclick = () => { Sound.init(); show('leaders'); };
+onShow.leaders = lbOpen;
 $('btnTrophies').onclick = () => show('trophies');
 $('btnSettings').onclick = () => show('settings');
 document.querySelectorAll('[data-go]').forEach(b => { b.onclick = () => show(b.dataset.go); });
@@ -1830,8 +2072,10 @@ onShow.settings = () => {
     ${sw('sNums', 'Always show fret numbers', 'Keeps numbers on in the later worlds too.', S.set.nums)}
     <div class="set-row"><label for="sNaming">Names for the in-between notes</label><select class="field" id="sNaming" style="max-width:220px">
       <option value="both">Sharps and flats (C♯/D♭)</option><option value="sharp">Sharps only (C♯)</option><option value="flat">Flats only (D♭)</option></select></div>
-    ${sw('sReduce', 'Reduce motion', 'Fewer particles, no screen shake.', S.set.reduce)}`;
+    ${sw('sReduce', 'Reduce motion', 'Fewer particles, no screen shake.', S.set.reduce)}
+    ${LB_URL ? `<div class="set-row"><label>Class leaderboard<small>${lbMe() ? `On the board as ${esc(S.lb.name)} ${esc(S.lb.init)}. · ${periodName(S.lb.period)}` : 'Not joined'}</small></label><button class="btn ghost small" id="sLb" type="button">Open</button></div>` : ''}`;
   $('sNaming').value = S.set.naming;
+  if ($('sLb')) $('sLb').onclick = () => show('leaders');
   $('sName').onchange = e => { const v = e.target.value.trim(); if (v) { S.name = v.slice(0, 24); save(); } };
   const bind = (id, key) => { $(id).onchange = e => { S.set[key] = e.target.checked; save(); applySettings(); }; };
   bind('sSfx', 'sfx'); bind('sMusic', 'music'); bind('sLefty', 'lefty'); bind('sNums', 'nums'); bind('sReduce', 'reduce');
